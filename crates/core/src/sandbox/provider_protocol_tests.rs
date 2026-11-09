@@ -4,7 +4,6 @@ use crate::sandbox::provider_protocol::{exec_outcome, parse_reply};
 use crate::sandbox::provider_script_output::ProviderScriptOutput;
 use crate::{AdapterError, AppError, DeliverySemantics, ErrorCode};
 
-const READY_LINE: &str = r#"{"ok":true,"state":"ready","message":"The dev sandbox is ready.","next":"agent-desktop sandbox exec dev -- snapshot","data":{"changed":true}}"#;
 const UNREADABLE: &str = "The macos-vm provider returned output agent-desktop could not read.";
 const NEXT_SUGGESTION: &str = "Run `agent-desktop sandbox list` to see your sandboxes.";
 
@@ -133,18 +132,14 @@ fn exec_failures_report_the_sandbox_error_and_unknown_delivery() {
     assert_eq!(error.message, "The sandbox dev does not exist.");
     assert_eq!(error.disposition, DeliverySemantics::unknown());
 
-    let unreadable = ProviderScriptOutput {
+    let guest_exit = ProviderScriptOutput {
         status: Some(125),
-        stdout: READY_LINE.as_bytes().to_vec(),
-        stderr_tail: "ssh: connect to host failed".to_owned(),
+        stdout: b"guest output\n".to_vec(),
+        stderr_tail: String::new(),
     };
-    let error = adapter(exec_outcome("macos-vm", &unreadable).unwrap_err());
-    assert_eq!(error.code, ErrorCode::ActionFailed);
-    assert_eq!(error.message, UNREADABLE);
-    assert_eq!(
-        error.platform_detail.as_deref(),
-        Some("ssh: connect to host failed")
-    );
+    let passthrough = exec_outcome("macos-vm", &guest_exit).unwrap();
+    assert_eq!(passthrough.stdout, b"guest output\n".to_vec());
+    assert_eq!(passthrough.status, 125);
 
     let no_status = ProviderScriptOutput {
         status: None,

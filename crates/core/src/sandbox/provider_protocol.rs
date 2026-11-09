@@ -33,14 +33,18 @@ pub(crate) fn exec_outcome(
     provider: &str,
     output: &ProviderScriptOutput,
 ) -> Result<ExecPassthrough, AppError> {
-    match output.status {
-        None => Err(missing_status(provider, output).into()),
-        Some(EXEC_PROVIDER_FAILURE_STATUS) => Err(exec_failure(provider, output).into()),
-        Some(status) => Ok(ExecPassthrough {
-            stdout: output.stdout.clone(),
-            status,
-        }),
+    let Some(status) = output.status else {
+        return Err(missing_status(provider, output).into());
+    };
+    if status == EXEC_PROVIDER_FAILURE_STATUS
+        && let Some(error) = exec_failure(provider, output)
+    {
+        return Err(error.into());
     }
+    Ok(ExecPassthrough {
+        stdout: output.stdout.clone(),
+        status,
+    })
 }
 
 fn success_reply(
@@ -86,14 +90,10 @@ fn failure_error(
     )
 }
 
-fn exec_failure(provider: &str, output: &ProviderScriptOutput) -> AdapterError {
-    let failure = reply_value(&output.stdout)
-        .filter(|value| value.get("ok").and_then(Value::as_bool) == Some(false));
-
-    match failure {
-        Some(value) => failure_error(provider, LIST_SUGGESTION, true, &value, output),
-        None => unreadable(provider, LIST_SUGGESTION, true, output),
-    }
+fn exec_failure(provider: &str, output: &ProviderScriptOutput) -> Option<AdapterError> {
+    reply_value(&output.stdout)
+        .filter(|value| value.get("ok").and_then(Value::as_bool) == Some(false))
+        .map(|value| failure_error(provider, LIST_SUGGESTION, true, &value, output))
 }
 
 fn missing_status(provider: &str, output: &ProviderScriptOutput) -> AdapterError {
