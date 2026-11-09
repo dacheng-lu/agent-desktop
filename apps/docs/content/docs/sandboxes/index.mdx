@@ -1,0 +1,89 @@
+---
+title: Sandboxing
+navTitle: Overview
+description: How agent-desktop drives an isolated desktop from the host or inside the sandbox, and where sandbox state lives.
+---
+
+A sandbox gives an agent its own desktop. Its apps and accessibility tree are separate from yours, so the agent can work without interacting with your desktop.
+
+The `agent-desktop sandbox` commands manage local macOS VMs through the `macos-vm` provider. Start with [macOS VM setup](/desktop/sandboxes/macos-vm). Linux and Windows have no local provider. [Vercel Sandbox](/desktop/sandboxes/vercel-sandbox) runs a hosted Linux microVM managed through the Vercel SDK instead.
+
+## How commands reach the sandbox
+
+The local provider starts a VM. `sandbox exec` runs each command inside the guest and passes the guest command's stdout and exit status through without adding an envelope; a provider failure becomes a host error envelope. The guest has one state root shared by every `sandbox exec` call, so snapshots, refs, sessions, and traces stay in the guest, not the host.
+
+<Diagram name="sandboxes" title="How agent-desktop works with sandboxes" aspectRatio="720 / 468" />
+
+## Run commands
+
+The examples use a sandbox named `demo` that is already created and running. For `sandbox exec`, put agent-desktop options after `--`.
+
+### From the host
+
+```bash
+agent-desktop sandbox exec demo -- launch Finder --activate
+agent-desktop sandbox exec demo -- snapshot --app Finder -i
+```
+
+The first command launches or focuses Finder and waits for a window. The second reads the app and prints qualified refs. Check that the snapshot shows Finder before you use a ref.
+
+### Inside the guest
+
+```bash
+agent-desktop launch Finder --activate
+agent-desktop snapshot --app Finder -i
+```
+
+An automation that already runs in `demo` uses the same two commands without `sandbox exec`. Accessibility permission belongs to the guest app that launches agent-desktop, and the host cannot grant it; the SSH grant from setup covers `sandbox exec`, not a different terminal or harness. See [Grant and check permissions](/desktop/platforms/macos#grant-and-check-permissions).
+
+## Commands
+
+<table>
+  <thead>
+    <tr><th>Command</th><th>What it does</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>install</code></td><td>Report each provider's state.</td></tr>
+    <tr><td><code>install PROVIDER</code></td><td>Satisfy one provider's host requirements, such as compiling its binary.</td></tr>
+    <tr><td><code>sandbox create NAME --provider PROVIDER</code></td><td>Create a sandbox. Repeat <code>--set key=value</code> to pass provider options.</td></tr>
+    <tr><td><code>sandbox start NAME</code></td><td>Start a stopped sandbox.</td></tr>
+    <tr><td><code>sandbox status NAME</code></td><td>Report one sandbox's state and its next command.</td></tr>
+    <tr><td><code>sandbox list</code></td><td>Report every sandbox with its provider and state.</td></tr>
+    <tr><td><code>sandbox exec NAME -- ARGS</code></td><td>Run agent-desktop inside the sandbox and pass its stdout and exit status through.</td></tr>
+    <tr><td><code>sandbox stop NAME</code></td><td>Stop a running sandbox.</td></tr>
+    <tr><td><code>sandbox rm NAME</code></td><td>Remove a stopped sandbox. A sandbox reported as <code>running</code> is refused.</td></tr>
+  </tbody>
+</table>
+
+## Read the state
+
+Follow `next` when it is present. A successful reply means the provider answered; it does not mean the sandbox is ready.
+
+<table>
+  <thead>
+    <tr><th>State</th><th>What to do</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>unavailable</code></td><td>Satisfy the host requirements in <code>message</code> and <code>next</code>.</td></tr>
+    <tr><td><code>missing</code></td><td>Install the provider.</td></tr>
+    <tr><td><code>ready</code></td><td>Create a sandbox.</td></tr>
+    <tr><td><code>working</code></td><td>Repeat the command in <code>next</code> until the work finishes.</td></tr>
+    <tr><td><code>needs_setup</code></td><td>Have a person finish guest setup, then check the status again.</td></tr>
+    <tr><td><code>running</code></td><td>Run guest commands, or stop the sandbox before removing it.</td></tr>
+    <tr><td><code>stopped</code></td><td>Start the sandbox to use it, or remove it.</td></tr>
+    <tr><td><code>broken</code></td><td>Follow <code>next</code>. An interrupted install is not resumed, so remove the sandbox and create it again.</td></tr>
+  </tbody>
+</table>
+
+[Errors and recovery](/desktop/errors-and-recovery) lists the codes a sandbox command returns, including `SANDBOX_NOT_FOUND`. [JSON output](/desktop/json-output) explains the envelope.
+
+## Where sandboxes live
+
+Sandbox state is under the state root, `~/.agent-desktop` or `AGENT_DESKTOP_HOME` when set:
+
+- `providers/<provider>/<hash>/` holds the provider files agent-desktop writes for one build of the binary, including `provider.sh`.
+- `sandboxes/<name>/sandbox.json` records the name, the provider, and the creation time. Everything else in that directory belongs to the provider.
+
+Names are 1 to 32 lowercase letters, digits, or dashes, starting with a letter or digit. Creating a name that already exists fails and leaves the existing sandbox in place.
+
+For a container you manage yourself, see [Run agent-desktop in a Docker container](/desktop/guides/docker-container).

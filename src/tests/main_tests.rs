@@ -40,6 +40,10 @@ fn visual_debug_flags_require_explicit_capture_consent_and_path() {
 #[path = "batch_seen_set_tests.rs"]
 mod batch_seen_set_tests;
 
+#[cfg(target_os = "macos")]
+#[path = "sandbox_provider_suites.rs"]
+mod sandbox_provider_suites;
+
 #[test]
 fn pre_dispatch_failures_are_always_safe_to_retry() {
     for error in [

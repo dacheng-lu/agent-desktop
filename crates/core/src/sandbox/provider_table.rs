@@ -2,7 +2,24 @@ use crate::sandbox::provider_spec::ProviderSpec;
 use crate::{AdapterError, AppError, ErrorCode};
 
 #[cfg(not(test))]
-pub(crate) const PROVIDERS: &[ProviderSpec] = &[];
+const MACOS_VM_PROVIDER: &str = include_str!("../../../../providers/macos-vm/provider.sh");
+#[cfg(not(test))]
+const MACOS_VM_HOST: &str = include_str!("../../../../providers/macos-vm/vmhost.swift");
+#[cfg(not(test))]
+const MACOS_VM_ENTITLEMENTS: &str = include_str!("../../../../providers/macos-vm/vm.entitlements");
+#[cfg(not(test))]
+const MACOS_VM_GUEST_SETUP: &str = include_str!("../../../../providers/macos-vm/guest-setup.sh");
+
+#[cfg(not(test))]
+pub(crate) const PROVIDERS: &[ProviderSpec] = &[ProviderSpec {
+    name: "macos-vm",
+    files: &[
+        ("provider.sh", MACOS_VM_PROVIDER),
+        ("vmhost.swift", MACOS_VM_HOST),
+        ("vm.entitlements", MACOS_VM_ENTITLEMENTS),
+        ("guest-setup.sh", MACOS_VM_GUEST_SETUP),
+    ],
+}];
 
 #[cfg(test)]
 pub(crate) const PROVIDERS: &[ProviderSpec] = &[

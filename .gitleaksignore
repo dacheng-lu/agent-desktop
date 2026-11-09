@@ -4,3 +4,6 @@
 # remove them or exempt later commits or other privacy findings.
 483a31d036175f54c34ce1fbd2cea762560ab78c:docs/plans/2026-08-16-001-feat-windows-2-12-fixture-e2e-harness-plan.md:ad-windows-account-sid:68
 483a31d036175f54c34ce1fbd2cea762560ab78c:docs/plans/2026-08-16-001-feat-windows-2-12-fixture-e2e-harness-plan.md:ad-windows-account-sid:167
+# The Docker guide's container user `agent`, not an operator account. The current tree no longer names its home path.
+837673e3572f3cbae0ae1c7974d581a70e0d3a66:apps/docs/content/docs/guides/docker-container.mdx:ad-home-directory-path:61
+837673e3572f3cbae0ae1c7974d581a70e0d3a66:apps/docs/content/docs/guides/docker-container.mdx:ad-home-directory-path:148

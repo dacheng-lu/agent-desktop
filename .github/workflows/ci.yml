@@ -133,6 +133,25 @@ jobs:
           clang -fobjc-arc -fblocks -Wall -Wextra -Werror -framework AppKit tests/native/appkit_workspace_name_test.m -o "$RUNNER_TEMP/appkit-workspace-name-test"
           "$RUNNER_TEMP/appkit-workspace-name-test"
 
+      - name: macOS VM host compiles, signs, and refuses a missing command
+        run: |
+          VM_HOST_DIR="$RUNNER_TEMP/macos-vm"
+          mkdir -p "$VM_HOST_DIR"
+          xcrun swiftc -O providers/macos-vm/vmhost.swift -o "$VM_HOST_DIR/vmhost"
+          codesign -f -s - --entitlements providers/macos-vm/vm.entitlements "$VM_HOST_DIR/vmhost"
+          codesign -d --entitlements - "$VM_HOST_DIR/vmhost" 2>&1 | grep -q com.apple.security.virtualization
+          set +e
+          "$VM_HOST_DIR/vmhost" > "$VM_HOST_DIR/usage.json" 2>&1
+          USAGE_STATUS=$?
+          set -e
+          test "$USAGE_STATUS" -eq 1
+          python3 - "$VM_HOST_DIR/usage.json" <<'PY'
+          import json, sys
+          reply = json.load(open(sys.argv[1]))
+          assert reply["ok"] is False, "vmhost accepted a missing command"
+          assert "install" in reply["message"] and "clone" in reply["message"], reply["message"]
+          PY
+
       - name: Locator benchmark adapter contract
         run: scripts/cargo-test-isolated-home.sh test --locked -p agent-desktop-core --example locator_benchmark
 

@@ -4,6 +4,12 @@ Shared domain vocabulary for this project: entities, named processes, and status
 
 ## Desktop Observation
 
+### Sandbox
+A named desktop that a provider creates and manages, where agent-desktop commands run separately from the host desktop.
+
+### Provider
+A named set of scripts that installs and manages sandboxes through the shared sandbox command contract.
+
 ### Accessibility Tree
 A structured representation of an application's user interface exposed by the operating system accessibility APIs and used by agent-desktop as the source of truth for observation and semantic interaction.
 

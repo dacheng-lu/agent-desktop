@@ -1,0 +1,150 @@
+---
+title: Run agent-desktop in a Docker container
+navTitle: Docker container
+description: Build an image from the released Linux binary, start a headless Linux desktop inside a container you manage, and run agent-desktop commands against it.
+---
+
+A container gives agent-desktop its own Linux desktop, so your commands act on apps inside the container instead of the desktop you are using. This guide builds that image from the released Linux binary and drives a text editor inside it. You run the container with Docker; the `sandbox` commands do not manage it, because the shipped provider is the [macOS VM](/desktop/sandboxes/macos-vm).
+
+## Requirements
+
+- Docker installed and running.
+- `curl`, and `shasum` or `sha256sum` to check the download.
+
+## 1. Download the Linux binary
+
+Run these commands in the directory that becomes the build context. The archive must match the architecture of the Docker daemon: `uname -m` gives the host's, and `docker info --format '{{.Architecture}}'` confirms what the daemon runs. Docker Desktop on Apple Silicon reports `aarch64`.
+
+```bash
+VERSION=1.0.2                                              # the agent-desktop release to run
+case $(uname -m) in                                        # arm64 on macOS, aarch64 on Linux
+  arm64 | aarch64) ARCH=aarch64 ;;
+  *) ARCH=x86_64 ;;
+esac
+RELEASE="https://github.com/vercel-labs/agent-desktop/releases/download/v$VERSION"
+TARBALL="agent-desktop-v$VERSION-$ARCH-unknown-linux-gnu.tar.gz"
+
+curl -fsSLO "$RELEASE/$TARBALL"
+curl -fsSLO "$RELEASE/checksums.txt"
+grep " $TARBALL\$" checksums.txt | shasum -a 256 -c -      # sha256sum -c - where shasum is absent
+tar -xzf "$TARBALL"
+```
+
+The checksum line confirms the download, and the archive adds `agent-desktop` and `agent-desktop-linux-clipboard-owner` to the directory. The binary looks for the clipboard helper beside itself.
+
+```text
+agent-desktop-v1.0.2-aarch64-unknown-linux-gnu.tar.gz: OK
+```
+
+## 2. Write the Dockerfile and the entrypoint
+
+Put both files in the same directory as the two binaries, and name the second one `entrypoint.sh`.
+
+```dockerfile
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      xvfb openbox dbus at-spi2-core libatk-bridge2.0-0 mousepad \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --shell /bin/bash agent \
+ && mkdir -p /run/agent-desktop /tmp/.X11-unix \
+ && chown agent:agent /run/agent-desktop \
+ && chmod 1777 /tmp/.X11-unix
+
+COPY agent-desktop agent-desktop-linux-clipboard-owner /usr/local/bin/
+COPY entrypoint.sh /usr/local/bin/agent-desktop-entrypoint
+RUN chmod 0755 /usr/local/bin/agent-desktop-entrypoint
+
+USER agent
+ENTRYPOINT ["/usr/local/bin/agent-desktop-entrypoint"]
+```
+
+```sh
+#!/bin/sh
+set -eu
+
+Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1 &
+i=0
+until [ -S /tmp/.X11-unix/X99 ]; do
+  i=$((i + 1))
+  [ "$i" -le 50 ] || { echo "agent-desktop-entrypoint: Xvfb did not start" >&2; exit 1; }
+  sleep 0.2
+done
+
+export DISPLAY=:99
+DBUS_SESSION_BUS_ADDRESS=$(dbus-daemon --session --fork --print-address)
+export DBUS_SESSION_BUS_ADDRESS
+
+openbox >/dev/null 2>&1 &
+
+printf "export DISPLAY=:99\nexport DBUS_SESSION_BUS_ADDRESS='%s'\n" "$DBUS_SESSION_BUS_ADDRESS" > /run/agent-desktop/env
+
+exec sleep infinity
+```
+
+The image installs Xvfb, openbox, D-Bus, and `at-spi2-core`, which provides the accessibility bus agent-desktop reads. The entrypoint starts a display at 1280x800, a session bus, and a window manager, then writes both addresses to `/run/agent-desktop/env` and keeps the container running.
+
+## 3. Build and start the container
+
+```bash
+docker build -t agent-desktop-container:1.0.2 .
+docker run -d --name agent-desktop-container agent-desktop-container:1.0.2
+```
+
+## 4. Run agent-desktop inside the container
+
+Wait for the entrypoint to write the display and bus address:
+
+```bash
+until docker exec agent-desktop-container test -s /run/agent-desktop/env; do sleep 1; done
+```
+
+Commands that read or act on the desktop load that file first. Open the text editor, then read its accessibility tree:
+
+```bash
+docker exec agent-desktop-container sh -c '. /run/agent-desktop/env && agent-desktop launch mousepad'
+docker exec agent-desktop-container sh -c '. /run/agent-desktop/env && agent-desktop snapshot --app mousepad -i'
+```
+
+`snapshot` answers with the accessibility tree it read:
+
+```json
+{
+  "version": "2.5",
+  "ok": true,
+  "command": "snapshot",
+  "data": {
+    "app": "mousepad",
+    "complete": true,
+    "ref_count": 271,
+    "snapshot_id": "s1814103cz5xc6",
+    "window": { "title": "Untitled 1 - Mousepad" },
+    "tree": {
+      "role": "window",
+      "name": "Untitled 1 - Mousepad",
+      "children": [
+        { "ref_id": "@s1814103cz5xc6:e268", "role": "scrollarea", "available_actions": ["SetFocus", "Scroll"] }
+      ]
+    }
+  }
+}
+```
+
+The tree and the window are trimmed here. `ref_count` counts every element that received a ref, `complete` says the walk reached the whole window, and `e268` is the scroll container of the text area. Continue with the ref as you would on a host desktop; the [observe, act, verify loop](/desktop/guides/observe-act-verify) covers the rest.
+
+## 5. Remove the container
+
+```bash
+docker rm -f agent-desktop-container
+docker image rm agent-desktop-container:1.0.2
+```
+
+## Limits
+
+- The desktop is headless: 1280x800 on display `:99`, and nothing appears on your screen.
+- The image runs as the user `agent`, and everything agent-desktop stores lives in that user's `~/.agent-desktop`. Removing the container removes that state.
+- The binary must match the container's architecture. Build on the machine that runs the container, or pass `--platform` to `docker run` and download the matching archive.
+- `sandbox` commands are not available in the container, because `macos-vm` needs macOS. Use the container's desktop directly, as above.
+- Running the container on a remote host is a manual setup today. A remote option is coming.
