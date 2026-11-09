@@ -19,6 +19,8 @@ pub(crate) fn policy_for(cmd: &Commands) -> PermissionNeed {
         | Commands::Skills(_)
         | Commands::Session(_)
         | Commands::CursorOverlay(_)
+        | Commands::Install(_)
+        | Commands::Sandbox(_)
         | Commands::Trace(_) => None,
         Commands::Status | Commands::Permissions(_) => None,
         Commands::ListWindows(_) | Commands::ListDisplays | Commands::ListApps(_) => None,
@@ -248,6 +250,8 @@ fn validate_args(cmd: &Commands) -> Result<(), AppError> {
         | Commands::Skills(_)
         | Commands::Session(_)
         | Commands::CursorOverlay(_)
+        | Commands::Install(_)
+        | Commands::Sandbox(_)
         | Commands::Trace(_) => {}
     }
     Ok(())

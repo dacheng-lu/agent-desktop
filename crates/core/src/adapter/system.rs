@@ -1,10 +1,11 @@
 use crate::{
-    AdapterError, AdapterSession, AppInfo, CursorOverlayControl, Deadline,
-    DismissAllNotificationsRequest, DismissNotificationRequest, ImageBuffer, InteractionLease,
-    InteractionPolicy, KeyCombo, NotificationActionRequest, NotificationFilter, NotificationInfo,
-    OperationReport, PermissionReport, PermissionState, ProcessIdentity, SessionAffinity,
-    SignalBaseline, SignalFilter, WindowInfo, WindowOp, actions::action_result::ActionResult,
-    system::display_info::DisplayInfo, system::screenshot_target::ScreenshotTarget,
+    AdapterError, AdapterSession, AppInfo, CursorOverlayControl, Deadline, DeliverySemantics,
+    DismissAllNotificationsRequest, DismissNotificationRequest, ErrorCode, ImageBuffer,
+    InteractionLease, InteractionPolicy, KeyCombo, NotificationActionRequest, NotificationFilter,
+    NotificationInfo, OperationReport, PermissionReport, PermissionState, ProcessIdentity,
+    ProviderScriptOutput, ProviderScriptRequest, SessionAffinity, SignalBaseline, SignalFilter,
+    WindowInfo, WindowOp, actions::action_result::ActionResult, system::display_info::DisplayInfo,
+    system::screenshot_target::ScreenshotTarget,
 };
 
 pub trait SystemOps: Send + Sync {
@@ -116,6 +117,19 @@ pub trait SystemOps: Send + Sync {
         _deadline: Deadline,
     ) -> Result<crate::system::process_state::ProcessState, AdapterError> {
         Err(AdapterError::not_supported("process_state"))
+    }
+
+    /// Runs one provider script under the platform's bounded process runner.
+    fn run_provider_script(
+        &self,
+        _request: &ProviderScriptRequest,
+    ) -> Result<ProviderScriptOutput, AdapterError> {
+        Err(AdapterError::new(
+            ErrorCode::PlatformNotSupported,
+            "Sandboxes are not available on this platform yet.",
+        )
+        .with_suggestion("Run the command on macOS to use a sandbox provider.")
+        .with_disposition(DeliverySemantics::not_delivered()))
     }
 
     fn supported_surfaces(&self) -> Vec<crate::adapter::SnapshotSurface> {

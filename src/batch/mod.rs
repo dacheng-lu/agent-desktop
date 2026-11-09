@@ -29,6 +29,10 @@ mod baseline_tests;
 #[path = "open_system_surface_parity_tests.rs"]
 mod open_system_surface_parity_tests;
 
+#[cfg(test)]
+#[path = "sandbox_tests.rs"]
+mod sandbox_tests;
+
 pub(crate) fn execute(
     args: BatchArgs,
     adapter: &dyn PlatformAdapter,
@@ -105,6 +109,10 @@ pub(crate) fn parse_command(item: BatchCommand) -> Result<Commands, AppError> {
             "Enable or disable it once for the selected session before running the batch.",
         )),
         "trace" => parse_trace(item.args).map(Commands::Trace),
+        "install" | "sandbox" => Err(AppError::invalid_input_with_suggestion(
+            "Run sandbox and install commands on their own, not inside batch.",
+            "Run 'agent-desktop sandbox' or 'agent-desktop install' as its own call.",
+        )),
         "batch" => Err(AppError::invalid_input_with_suggestion(
             "Batch commands cannot be nested",
             "Flatten nested batches into one top-level batch array",

@@ -8,6 +8,7 @@ mod notifications;
 mod observation;
 mod overlay_skipped;
 mod parse;
+pub(crate) mod sandbox;
 mod session;
 mod system;
 mod trace;
@@ -134,6 +135,8 @@ fn dispatch_command(
         Commands::Session(args) => session::dispatch(args, adapter, context),
         Commands::CursorOverlay(args) => cursor_overlay::dispatch(args, adapter, context),
         Commands::Trace(args) => trace::dispatch(args, context),
+        Commands::Install(args) => commands::install::execute(args.provider, adapter),
+        Commands::Sandbox(args) => sandbox::dispatch(args, adapter),
     };
     if let Some(session_id) = overlay_session {
         let _ = adapter.update_cursor_overlay(&CursorOverlayControl::show(session_id));

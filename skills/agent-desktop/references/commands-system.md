@@ -216,6 +216,18 @@ Multi-agent cursors (macOS and Windows): start with `session start --cursor --mu
 - `--agent-id <id> cursor-overlay enable` saves a style for that agent. Do not add `--multi-agent` to it.
 - `cursor-overlay disable` and `session end` stop every cursor in the session, even when you pass an agent id.
 
+## Sandboxes
+
+`agent-desktop install` lists the providers, and `agent-desktop sandbox list` lists the sandboxes with `name`, `state`, `message`, and `next`. A single sandbox command also returns its `provider`.
+
+A sandbox whose record is malformed or missing appears in `sandbox list` with `state: "broken"` and no `provider`, because agent-desktop cannot read who owns it. Recover it with the provider that created it:
+
+```bash
+agent-desktop sandbox rm dev-1 --provider macos-vm
+```
+
+`--provider` is for that recovery only. A healthy record supplies its own provider, and a different value is refused. Removal still asks the provider first, so a running sandbox is refused and its data stays. Without `--provider`, the same broken record returns `INVALID_ARGS` with the recovery command in `suggestion`.
+
 ## status, permissions, version
 
 - `status` returns adapter health, platform, the permission report, `supported_surfaces`, the latest snapshot (`snapshot_id`, `ref_count`), `session_id`, `tracing`, `state_root`.

@@ -1,15 +1,19 @@
 //! Runs one tool call as a child process of this same binary and maps its JSON envelope to an MCP result.
 
+use clap::{CommandFactory, parser::ValueSource};
 use serde_json::{Map, Value, json};
+use std::collections::BTreeSet;
 use std::io::Read;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use super::calls::Calls;
 use super::catalog::Tool;
+use crate::cli::Cli;
 
 const CANCELLED: &str = "Cancelled";
 
-/// Runs `tool` with `arguments` for request `id`, prefixed by the server's own global flags, and returns a
+/// Runs `tool` with `arguments` for request `id`, carrying the server's own global flags, and returns a
 /// `CallToolResult`. A cancelled call returns early; the caller sends no response for it.
 pub(crate) fn call(
     tool: &Tool,
@@ -26,13 +30,7 @@ pub(crate) fn call(
         Ok(exe) => exe,
         Err(error) => return error_result(&format!("Cannot locate agent-desktop: {error}")),
     };
-    let mut command = Command::new(exe);
-    command
-        .args(globals)
-        .args(&argv)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    let mut command = child_command(&exe, tool, argv, globals);
     let (stdout, stderr) = match calls.start(id, &mut command) {
         None => return error_result(CANCELLED),
         Some(Err(error)) => return error_result(&format!("Cannot run agent-desktop: {error}")),
@@ -56,6 +54,70 @@ pub(crate) fn call(
             String::from_utf8_lossy(&stderr).trim()
         )),
     }
+}
+
+/// Builds the child command that runs `tool`: server globals precede an ordinary tool, and belong to the
+/// guest command after `sandbox exec NAME --`. A global the guest sets itself wins over the server's value,
+/// and the guest's own parser remains the authority on whether its full argument list is valid.
+fn child_command(exe: &Path, tool: &Tool, argv: Vec<String>, globals: &[String]) -> Command {
+    let mut command = Command::new(exe);
+    command
+        .args(command_args(tool, argv, globals))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command
+}
+
+fn command_args(tool: &Tool, argv: Vec<String>, globals: &[String]) -> Vec<String> {
+    if globals.is_empty() {
+        return argv;
+    }
+    if tool.path != ["sandbox", "exec"] {
+        return globals.iter().cloned().chain(argv).collect();
+    }
+    let Some(delimiter) = argv.iter().position(|arg| arg == "--") else {
+        return globals.iter().cloned().chain(argv).collect();
+    };
+    let guest = &argv[delimiter + 1..];
+    if guest.is_empty() {
+        return argv;
+    }
+    let explicit = explicit_guest_globals(guest);
+    let mut args = argv[..=delimiter].to_vec();
+    args.extend(
+        globals
+            .iter()
+            .filter(|global| !explicit.contains(flag_name(global)))
+            .cloned(),
+    );
+    args.extend(guest.iter().cloned());
+    args
+}
+
+fn flag_name(global: &str) -> &str {
+    let flag = global.strip_prefix("--").unwrap_or(global);
+    flag.split('=').next().unwrap_or(flag)
+}
+
+/// The globals the guest command sets itself. Argument errors are ignored for metadata only, and a parse
+/// that cannot supply matches yields an empty set so the caller keeps every inherited global.
+fn explicit_guest_globals(guest: &[String]) -> BTreeSet<String> {
+    let mut command = Cli::command()
+        .subcommand(super::command())
+        .ignore_errors(true);
+    let argv = std::iter::once("agent-desktop")
+        .chain(guest.iter().map(String::as_str))
+        .collect::<Vec<_>>();
+    let Ok(matches) = command.try_get_matches_from_mut(argv) else {
+        return BTreeSet::new();
+    };
+    command
+        .get_arguments()
+        .filter(|arg| arg.is_global_set())
+        .filter(|arg| matches.value_source(arg.get_id().as_str()) == Some(ValueSource::CommandLine))
+        .filter_map(|arg| arg.get_long().map(ToString::to_string))
+        .collect()
 }
 
 fn read_all(pipe: Option<impl Read>) -> Vec<u8> {
@@ -94,3 +156,7 @@ fn take_inline_image(envelope: &mut Value) -> Option<Value> {
 fn error_result(message: &str) -> Value {
     json!({ "content": [{ "type": "text", "text": message }], "isError": true })
 }
+
+#[cfg(test)]
+#[path = "call_tests.rs"]
+mod tests;

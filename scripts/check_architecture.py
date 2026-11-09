@@ -30,8 +30,8 @@ PLATFORM_FILES = {"lib.rs", "adapter.rs"}
 PLATFORM_OPTIONAL = {"adapter_tests.rs", "bin"}
 CORE_TOP_FILES = {"lib.rs"}
 CORE_DOMAINS = {"actionability", "actions", "adapter", "commands", "context", "cursor_overlay", "input",
-                "locator", "notifications", "ref_action", "refs", "response", "session", "snapshot",
-                "storage", "system", "trace", "tree", "wait"}
+                "locator", "notifications", "ref_action", "refs", "response", "sandbox", "session",
+                "snapshot", "storage", "system", "trace", "tree", "wait"}
 BINARY_TOP_FILES = {"main.rs", "Cargo.toml"}
 BINARY_DIRS = {"batch", "cli", "cli_args", "command_policy", "diagnostic", "dispatch", "mcp",
                "tests", "visual_debug"}
@@ -100,6 +100,11 @@ TEST_MODULE = re.compile(r"#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*(?:pub(?:\s*\([^
 
 
 STR = re.compile(r"__S(\d+)__")
+
+PROVIDERS_DIR = "providers"
+PROVIDERS_SUFFIXES = {".sh", ".swift"}
+PROVIDERS_LISTENER = re.compile(
+    r"(?<![A-Za-z0-9_])(?:socket\s*\(|listen\s*\(|bind\s*\(|nc\s|socat|NWListener|VZVirtioSocket)")
 
 
 class Source:
@@ -220,6 +225,20 @@ def rs_files(root):
         for f in sorted(files):
             if f.endswith(".rs"):
                 yield os.path.join(base, f)
+
+
+def provider_files(root):
+    """Provider scripts under the top-level providers/ folder; none when it is absent."""
+    top = os.path.join(root, PROVIDERS_DIR)
+    if not os.path.isdir(top):
+        return []
+    found = []
+    for base, dirs, files in os.walk(top):
+        dirs[:] = sorted(d for d in dirs if d not in ("target", ".git", "node_modules"))
+        for f in sorted(files):
+            if os.path.splitext(f)[1] in PROVIDERS_SUFFIXES:
+                found.append(os.path.join(base, f))
+    return found
 
 
 def has_files(path):
@@ -391,6 +410,14 @@ def check(repo):
             err("G12", f"{rel} names {HOST_MARKER}, the marker of the removed command host")
     for stale in sorted(LISTENER_ALLOWLIST - serving):
         err("G12", f"LISTENER_ALLOWLIST lists {stale}, which no longer opens a listener")
+
+    for path in provider_files(repo):
+        rel = os.path.relpath(path, repo).replace(os.sep, "/")
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            hit = PROVIDERS_LISTENER.search(fh.read())
+        if hit:
+            err("G12", f"{rel} opens a listener ({hit.group(0).strip()}); a provider drives a desktop and "
+                       "serves nothing, so a socket or listener here needs a review decision")
 
     for p in PLATFORMS:
         if not os.path.exists(os.path.join(repo, "crates", p, "Cargo.toml")):
@@ -585,6 +612,8 @@ PLANTS = {
             ("crates/core/src/tree/mod.rs", "pub mod node;\n#[path = \"@ABS@/crates/core/src/input/mod.rs\"]\nmod misplaced;\n")],
 }
 PLANTS["G12"] = [
+    ("providers/macos-vm/provider.sh", "#!/bin/sh\nsocat TCP-LISTEN:9000,fork EXEC:sh\n"),
+    ("providers/macos-vm/vmhost.swift", "import Network\nlet l = try NWListener(using: .tcp)\n"),
     ("crates/macos/src/system/host.rs", "fn f() { let _ = std::os::unix::net::UnixListener::bind(\"/tmp/h.sock\"); }\n"),
     ("crates/core/src/system/host.rs", "fn f() { let _ = std::net::TcpListener::bind((\"127.0.0.1\", 0)); }\n"),
     ("crates/windows/src/system/host.rs", "fn f() { let _ = CreateNamedPipeW; }\n"),

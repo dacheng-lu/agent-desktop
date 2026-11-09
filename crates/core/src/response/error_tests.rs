@@ -54,6 +54,7 @@ fn all_error_codes_as_str_and_serde_are_consistent() {
         (ErrorCode::InvalidArgs, "INVALID_ARGS"),
         (ErrorCode::NotificationNotFound, "NOTIFICATION_NOT_FOUND"),
         (ErrorCode::SnapshotNotFound, "SNAPSHOT_NOT_FOUND"),
+        (ErrorCode::SandboxNotFound, "SANDBOX_NOT_FOUND"),
         (ErrorCode::PolicyDenied, "POLICY_DENIED"),
         (ErrorCode::AppUnresponsive, "APP_UNRESPONSIVE"),
         (ErrorCode::Internal, "INTERNAL"),

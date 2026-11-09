@@ -76,19 +76,34 @@ impl Tool {
     /// Builds the CLI arguments, after the binary name, that run this command with `arguments`; a null value counts as omitted.
     pub(crate) fn argv(&self, arguments: &Map<String, Value>) -> Result<Vec<String>, String> {
         let mut argv = self.path.clone();
+        let has_last_positional = self.args().any(Arg::is_last_set);
         let mut positionals = Vec::new();
+        let mut last_positionals = Vec::new();
         for (key, value) in arguments.iter().filter(|(_, value)| !value.is_null()) {
             let arg = self
                 .args()
                 .find(|arg| property_name(arg) == *key)
                 .ok_or_else(|| self.unknown_argument(key))?;
             if arg.is_positional() {
-                positionals.push((arg.get_index().unwrap_or(usize::MAX), scalars(key, value)?));
+                let positional = (arg.get_index().unwrap_or(usize::MAX), scalars(key, value)?);
+                if arg.is_last_set() {
+                    last_positionals.push(positional);
+                } else {
+                    positionals.push(positional);
+                }
             } else {
                 push_option(&mut argv, arg, key, value)?;
             }
         }
-        if !positionals.is_empty() {
+        if has_last_positional {
+            positionals.sort_by_key(|(index, _)| *index);
+            argv.extend(positionals.into_iter().flat_map(|(_, values)| values));
+            if !last_positionals.is_empty() {
+                last_positionals.sort_by_key(|(index, _)| *index);
+                argv.push("--".to_string());
+                argv.extend(last_positionals.into_iter().flat_map(|(_, values)| values));
+            }
+        } else if !positionals.is_empty() {
             positionals.sort_by_key(|(index, _)| *index);
             argv.push("--".to_string());
             argv.extend(positionals.into_iter().flat_map(|(_, values)| values));

@@ -20,6 +20,7 @@ const NON_COMMAND_MODULES: &[&str] = &[
     "post_action_observation",
     "query",
     "find_live_test_support",
+    "sandbox_action",
     "selector_observation",
     "surface_scope",
     "type_text_interval",
@@ -76,7 +77,7 @@ const SHARED_REF_ACTION_TESTS: &[&str] = &[
     "uncheck",
 ];
 
-const BINARY_CONTRACT_TESTS: &[&str] = &["batch", "permissions", "version"];
+const BINARY_CONTRACT_TESTS: &[&str] = &["batch", "install", "permissions", "sandbox", "version"];
 
 const ADAPTER_PASSTHROUGH_COMMANDS: &[&str] = &[
     "clipboard-clear",
@@ -158,7 +159,7 @@ fn macos_capability_count_includes_restored_notifications() {
     let commands = cli_command_names();
     assert_eq!(
         commands.len(),
-        60,
+        62,
         "the published CLI command count changed; update capability documentation"
     );
 }

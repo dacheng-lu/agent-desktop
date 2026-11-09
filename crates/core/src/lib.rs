@@ -12,6 +12,7 @@ mod notifications;
 pub mod ref_action;
 pub mod refs;
 pub mod response;
+pub mod sandbox;
 pub mod session;
 pub mod snapshot;
 mod storage;
@@ -104,6 +105,9 @@ pub use response::error_code::ErrorCode;
 pub use response::output::{ErrorPayload, Response};
 pub use response::recovery_hint::RecoveryHint;
 pub use response::retry_disposition::RetryDisposition;
+pub use sandbox::exec_passthrough::ExecPassthrough;
+pub use sandbox::provider_script_output::ProviderScriptOutput;
+pub use sandbox::provider_script_request::ProviderScriptRequest;
 pub use session::interaction_lease::InteractionLease;
 #[cfg(unix)]
 pub use session::interaction_lease::{

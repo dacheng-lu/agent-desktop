@@ -120,6 +120,76 @@ fn unknown_arguments_and_wrong_types_are_reported_not_passed_through() {
     );
 }
 
+#[test]
+fn sandbox_exec_keeps_nested_arguments_after_the_delimiter() {
+    let tool = tool_at(&["sandbox", "exec"]);
+    let nested_args = [
+        "snapshot".to_string(),
+        "--app".to_string(),
+        "Finder".to_string(),
+        "--headed".to_string(),
+        "--trace=/tmp/owned".to_string(),
+        "--session=x".to_string(),
+    ];
+    let mut arguments = Map::new();
+    arguments.insert("name".into(), Value::from("dev"));
+    arguments.insert(
+        "args".into(),
+        Value::Array(nested_args.iter().cloned().map(Value::String).collect()),
+    );
+
+    let argv = tool
+        .argv(&arguments)
+        .expect("sandbox exec arguments build argv");
+    assert_eq!(
+        argv,
+        [
+            "sandbox",
+            "exec",
+            "dev",
+            "--",
+            "snapshot",
+            "--app",
+            "Finder",
+            "--headed",
+            "--trace=/tmp/owned",
+            "--session=x",
+        ]
+    );
+
+    let cli = parse(&tool, &arguments).expect("sandbox exec tool arguments parse");
+    assert!(!cli.interaction.headed);
+    assert!(cli.trace.is_none());
+    assert!(cli.identity.session.is_none());
+    let Some(crate::cli::Commands::Sandbox(args)) = cli.command else {
+        panic!("sandbox exec command");
+    };
+    let crate::cli_args::sandbox::SandboxActionCli::Exec(exec) = args.action else {
+        panic!("sandbox exec action");
+    };
+    assert_eq!(exec.name, "dev");
+    assert_eq!(exec.args, nested_args);
+}
+
+#[test]
+fn sandbox_rm_schema_exposes_the_recovery_provider() {
+    let tool = tool_at(&["sandbox", "rm"]);
+    let definition = tool.definition();
+
+    assert_eq!(
+        definition["inputSchema"]["properties"]["provider"]["type"],
+        "string"
+    );
+    assert!(
+        definition["inputSchema"]["required"]
+            .as_array()
+            .is_some_and(|required| !required
+                .iter()
+                .any(|name| name.as_str() == Some("provider"))),
+        "the provider is optional"
+    );
+}
+
 fn tool_at(path: &[&str]) -> Tool {
     tools()
         .into_iter()

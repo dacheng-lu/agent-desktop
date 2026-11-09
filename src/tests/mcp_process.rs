@@ -87,6 +87,42 @@ fn mcp_server_global_flags_reach_every_call() {
 }
 
 #[test]
+fn mcp_sandbox_exec_hands_server_globals_to_the_guest_command() {
+    let name = format!("missing-{}", std::process::id());
+    let responses = serve(
+        &[
+            call(
+                1,
+                "desktop_sandbox_exec",
+                json!({ "name": name, "args": ["snapshot", "--app", "Finder"] }),
+            ),
+            call(
+                2,
+                "desktop_sandbox_exec",
+                json!({
+                    "name": format!("{name}-guest"),
+                    "args": ["--session=guest", "--headed", "snapshot", "--app", "Finder"],
+                }),
+            ),
+        ],
+        &[
+            "--session=server",
+            "--headed",
+            "--trace=/tmp/mcp-sandbox-trace",
+        ],
+    );
+    assert_eq!(responses.len(), 2, "{responses:?}");
+    for response in &responses {
+        let result = &response["result"];
+        assert_eq!(result["isError"], true, "{result}");
+        assert_eq!(
+            result["structuredContent"]["error"]["code"], "SANDBOX_NOT_FOUND",
+            "{result}"
+        );
+    }
+}
+
+#[test]
 fn malformed_messages_get_errors_and_the_server_keeps_serving() {
     let responses = serve(
         &[

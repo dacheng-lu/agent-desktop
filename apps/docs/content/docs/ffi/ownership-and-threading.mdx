@@ -93,7 +93,7 @@ ad_release_exact_window_fields(&win);
 
 The strings stay valid across later successful calls on the same thread; only the next failing call replaces them, like POSIX `errno`. The slot is thread-local. Retry only when the retry disposition is `AD_RETRY_DISPOSITION_SAFE`, as described in [Errors and recovery](/desktop/errors-and-recovery#disposition).
 
-`AdResult` codes mirror the CLI's [error codes](/desktop/errors-and-recovery#error-codes): `AD_RESULT_ERR_PERM_DENIED` is -1 through `AD_RESULT_ERR_APP_UNRESPONSIVE` at -16. The full list is on the [API page](/desktop/ffi/api#enums). Treat any negative value outside that list as an unknown error, because new codes can be appended.
+`AdResult` codes mirror the CLI's [error codes](/desktop/errors-and-recovery#error-codes): `AD_RESULT_ERR_PERM_DENIED` is -1 through `AD_RESULT_ERR_SANDBOX_NOT_FOUND` at -17. The full list is on the [API page](/desktop/ffi/api#enums). Treat any negative value outside that list as an unknown error, because new codes can be appended.
 
 ### Two failure modes for JSON entrypoints
 

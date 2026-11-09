@@ -45,6 +45,7 @@ fn result_discriminants_preserve_existing_abi_values() {
     assert_eq!(AdResult::ErrPolicyDenied as i32, -14);
     assert_eq!(AdResult::ErrAmbiguousTarget as i32, -15);
     assert_eq!(AdResult::ErrAppUnresponsive as i32, -16);
+    assert_eq!(AdResult::ErrSandboxNotFound as i32, -17);
 }
 
 /// Reverse of `error_code_to_result`, kept solely to guard the bijection. The
@@ -72,6 +73,7 @@ fn error_code_origin(result: AdResult) -> Option<ErrorCode> {
         AdResult::ErrPolicyDenied => ErrorCode::PolicyDenied,
         AdResult::ErrAmbiguousTarget => ErrorCode::AmbiguousTarget,
         AdResult::ErrAppUnresponsive => ErrorCode::AppUnresponsive,
+        AdResult::ErrSandboxNotFound => ErrorCode::SandboxNotFound,
     })
 }
 
@@ -94,6 +96,7 @@ fn error_code_and_ad_result_error_variants_stay_in_bijection() {
         AdResult::ErrPolicyDenied,
         AdResult::ErrAmbiguousTarget,
         AdResult::ErrAppUnresponsive,
+        AdResult::ErrSandboxNotFound,
     ] {
         let code = error_code_origin(result).expect("error variant must have an ErrorCode origin");
         assert_eq!(
