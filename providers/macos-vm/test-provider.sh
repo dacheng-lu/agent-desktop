@@ -355,6 +355,7 @@ grep -qx -- '-C' "$FAKE_LOG" || fail 'a partial cached image did not resume with
 grep -qx "$image_path" "$FAKE_INSTALLS" || fail 'the resumed image was not installed'
 cmp -s "$image_path" "$tmp/expected-image" || fail 'the resumed image does not match the catalog SHA-1'
 [ ! -f "$partial_path" ] || fail 'a published download left its private partial image'
+[ ! -e "$tmp/downloads/partial/vm/download" ] || fail 'the install ran with the download directory still in the bundle'
 
 printf '%*s' "${#FAKE_IMAGE_CONTENT}" '' | tr ' ' x > "$image_path"
 : > "$FAKE_LOG"

@@ -522,6 +522,7 @@ do_install_job() {
       rm -f "$partial"
     fi
     rm -f "$VM_DIR/download.path" "$VM_DIR/download.size"
+    rm -rf "$download_dir"
   fi
   if ! "$VMHOST" install "$VM_DIR" "$ipsw"; then return 1; fi
   if ! copy_guest_share "$VM_DIR"; then
