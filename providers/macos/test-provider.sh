@@ -29,15 +29,23 @@ FAKE_INSTALLS=$tmp/installs
 FAKE_PS_COMM=/opt/agent-desktop/build/vmhost
 FAKE_PS_BUNDLE=$AD_SANDBOX_DIR/vm
 FAKE_PS_COMMAND=
+FAKE_GUEST_HOME=$tmp/exec-guest
 export AD_SANDBOX_DIR AD_PROVIDER_DIR AD_BINARY VMHOST FAKE_LOG
 export FAKE_HV_SUPPORT FAKE_SWIFTC_FOUND FAKE_GUEST_SHA1 FAKE_GUEST_HELPER_SHA1
-export FAKE_EXEC_BUDGET FAKE_INSTALLS
+export FAKE_EXEC_BUDGET FAKE_INSTALLS FAKE_GUEST_HOME
 export FAKE_PS_BUNDLE FAKE_PS_COMM FAKE_PS_COMMAND
 
 printf '#!/bin/sh\n' > "$AD_PROVIDER_DIR/guest-setup.sh"
 printf 'binary\n' > "$AD_BINARY"
 printf 'helper\n' > "$tmp/agent-desktop-macos-helper"
 chmod 0755 "$tmp/agent-desktop-macos-helper"
+mkdir -p "$FAKE_GUEST_HOME/.local/bin"
+cat > "$FAKE_GUEST_HOME/.local/bin/agent-desktop" <<'FAKE'
+#!/bin/sh
+printf 'guest output\n'
+exit "${FAKE_GUEST_EXIT:-0}"
+FAKE
+chmod 0755 "$FAKE_GUEST_HOME/.local/bin/agent-desktop"
 
 cat > "$tmp/bin/uname" <<'FAKE'
 #!/bin/sh
@@ -75,6 +83,7 @@ set -eu
 case ${1:-} in
   install)
     printf '%s\n' "$3" >> "$FAKE_INSTALLS"
+    if [ -n "${FAKE_INSTALL_SLOW:-}" ]; then sleep 30; fi
     ;;
   clone)
     mkdir -p "$3/share"
@@ -229,6 +238,7 @@ case $remote in
     printf '%s  agent-desktop-macos-helper\n' "${FAKE_GUEST_HELPER_SHA1:-}"
     ;;
   *'shasum -a 1'*) printf '%s  agent-desktop\n' "${FAKE_GUEST_SHA1:-}" ;;
+  "~/.local/bin/agent-desktop "*) HOME=$FAKE_GUEST_HOME sh -c "$remote" ;;
   *) printf '{"ok":true,"command":"guest"}\n' ;;
 esac
 FAKE
@@ -252,6 +262,7 @@ if [ -z "$batch" ] || [ -z "$connect_timeout" ]; then
   sleep 40
   exit 1
 fi
+if [ "${FAKE_SCP_BEHAVIOR:-}" = fail ]; then exit 1; fi
 FAKE
 cat > "$tmp/bin/ps" <<'FAKE'
 #!/bin/sh
@@ -616,6 +627,18 @@ done
 
 rm -rf "$AD_SANDBOX_DIR"
 mkdir -p "$AD_SANDBOX_DIR"
+typo_sandbox=$tmp/unknown-setting/demo
+mkdir -p "$typo_sandbox"
+: > "$FAKE_LOG"
+status=0
+env AD_SET_ISPW=/tmp/typo.ipsw AD_SANDBOX_DIR="$typo_sandbox" sh "$here/provider.sh" create demo > "$tmp/out" 2> "$tmp/err" || status=$?
+[ "$status" = 1 ] || fail "create with an unknown setting key exited $status: $(cat "$tmp/out" "$tmp/err")"
+assert_field "$tmp/out" code INVALID_ARGS 'create with an unknown setting key'
+grep -q 'Unknown setting ispw' "$tmp/out" || fail "create did not name the unknown key: $(cat "$tmp/out")"
+grep -q 'ipsw, from, user' "$tmp/out" || fail "create did not list the valid keys: $(cat "$tmp/out")"
+[ ! -e "$typo_sandbox/id_ed25519" ] && [ ! -e "$typo_sandbox/vm" ] || fail 'create with an unknown setting key touched the sandbox'
+grep -q 'BEGIN curl' "$FAKE_LOG" && fail 'create with an unknown setting key started a download'
+
 user_ipsw="$tmp/user image.ipsw"
 printf 'user image\n' > "$user_ipsw"
 : > "$FAKE_LOG"
@@ -708,6 +731,29 @@ kill "$(cat "$AD_SANDBOX_DIR/vm/vmhost.pid")" 2>/dev/null || true
 unset FAKE_RUN_BEHAVIOR
 rm -f "$AD_SANDBOX_DIR/vm/vmhost.pid" "$AD_SANDBOX_DIR/vm/vmhost.started" "$AD_SANDBOX_DIR/setup_done"
 
+lock_vmhost=$tmp/real-vmhost
+/usr/bin/xcrun swiftc -O "$here/vmhost.swift" -o "$lock_vmhost" > "$tmp/swiftc.log" 2>&1 || \
+  fail "vmhost.swift did not compile: $(cat "$tmp/swiftc.log")"
+lock_bundle=$tmp/lock/demo/vm
+mkdir -p "$lock_bundle"
+rm -f "$tmp/lock-ready"
+perl -MFcntl=:flock -e 'open(my $fh, ">>", $ARGV[0]) or die "open: $!"; flock($fh, LOCK_EX) or die "flock: $!"; open(my $ready, ">", $ARGV[1]) or die "ready: $!"; close($ready); sleep 30' \
+  "$lock_bundle/vmhost.lock" "$tmp/lock-ready" &
+lock_holder_pid=$!
+wait_tries=0
+while [ ! -f "$tmp/lock-ready" ] && [ "$wait_tries" -lt 100 ]; do
+  sleep 0.1
+  wait_tries=$((wait_tries + 1))
+done
+[ -f "$tmp/lock-ready" ] || fail 'the lock holder did not take the bundle lock'
+status=0
+"$lock_vmhost" run "$lock_bundle" > "$tmp/out" 2> "$tmp/err" || status=$?
+kill "$lock_holder_pid" 2>/dev/null || true
+wait "$lock_holder_pid" 2>/dev/null || true
+[ "$status" = 1 ] || fail "a second vmhost run on a locked bundle exited $status: $(cat "$tmp/out" "$tmp/err")"
+assert_field "$tmp/out" message 'The sandbox demo is already running.' 'a second vmhost run on a locked bundle'
+[ ! -e "$lock_bundle/vmhost.pid" ] || fail 'a second vmhost run recorded its pid over the lock holder'
+
 printf '1000000000\n' > "$AD_SANDBOX_DIR/vm/download.size"
 mkfile -n 340000000 "$AD_SANDBOX_DIR/vm/latest.ipsw"
 printf '%s\n' "$AD_SANDBOX_DIR/vm/latest.ipsw" > "$AD_SANDBOX_DIR/vm/download.path"
@@ -737,6 +783,34 @@ job_pid=
 rm -f "$AD_SANDBOX_DIR/vm/install.pid"
 FAKE_PS_COMMAND=
 
+slow_dir=$tmp/sandboxes/slow
+mkdir -p "$slow_dir"
+: > "$FAKE_LOG"
+FAKE_INSTALL_SLOW=1
+export FAKE_INSTALL_SLOW
+status=0
+env AD_SANDBOX_DIR="$slow_dir" AD_SET_IPSW="$user_ipsw" sh "$here/provider.sh" create slow > "$tmp/out" 2> "$tmp/err" || status=$?
+unset FAKE_INSTALL_SLOW
+[ "$status" = 0 ] || fail "create of a slow install exited $status: $(cat "$tmp/out" "$tmp/err")"
+slow_job_pid=$(cat "$slow_dir/vm/install.pid")
+wait_tries=0
+while ! grep -qx install "$FAKE_LOG" && [ "$wait_tries" -lt 100 ]; do
+  sleep 0.1
+  wait_tries=$((wait_tries + 1))
+done
+grep -qx install "$FAKE_LOG" || fail 'the slow install child never started'
+kill -9 "$slow_job_pid" 2>/dev/null || true
+wait_for_exit "$slow_job_pid"
+status=0
+run_provider_with AD_SANDBOX_DIR "$slow_dir" status slow > "$tmp/out" 2> "$tmp/err" || status=$?
+rm_status=0
+run_provider_with AD_SANDBOX_DIR "$slow_dir" rm slow > "$tmp/rm.out" 2> "$tmp/rm.err" || rm_status=$?
+kill -- "-$slow_job_pid" 2>/dev/null || true
+[ "$status" = 0 ] || fail "status after the install job shell died exited $status: $(cat "$tmp/out" "$tmp/err")"
+assert_field "$tmp/out" state working 'status after the install job shell died under its installer'
+[ "$rm_status" = 1 ] || fail "rm removed a bundle whose installer was still running (exit $rm_status)"
+[ -d "$slow_dir/vm" ] || fail 'rm removed the bundle while its installer was still running'
+
 sleep 30 &
 vm_pid=$!
 printf '%s\n' "$vm_pid" > "$AD_SANDBOX_DIR/vm/vmhost.pid"
@@ -763,18 +837,20 @@ ssh = [args for kind, args in events if kind == "ssh"]
 scp = [args for kind, args in events if kind == "scp"]
 if not ssh:
     sys.exit("no ssh command was recorded")
-if shlex.split(ssh[-1][-1]) != ["~/.local/bin/agent-desktop", sys.argv[2]]:
+if shlex.split(ssh[-1][-1].split("; ad_status=", 1)[0]) != ["~/.local/bin/agent-desktop", sys.argv[2]]:
     sys.exit("exec argument was not preserved as one quoted word: %r" % ssh[-1][-1])
 commands = [shlex.split(block[-1]) for block in ssh if block]
 if ["mkdir", "-p", "~/.local/bin"] not in commands:
     sys.exit("exec did not create ~/.local/bin in the guest")
-destinations = [args[-1] for args in scp]
+destinations = [args[-1].split(":", 1)[1] for args in scp]
 for name in ("agent-desktop", "agent-desktop-macos-helper"):
-    if not any(path.endswith(":~/.local/bin/%s.new" % name) for path in destinations):
+    staged = [path for path in destinations
+              if path.startswith("~/.local/bin/%s." % name) and path.endswith(".new")]
+    if not staged:
         sys.exit("exec did not copy %s onto a staging file: %r" % (name, scp))
     if not [words for words in commands
-            if words[:3] == ["chmod", "755", "~/.local/bin/%s.new" % name]
-            and words[-2:] == ["~/.local/bin/%s.new" % name, "~/.local/bin/%s" % name]]:
+            if len(words) >= 3 and words[:2] == ["chmod", "755"] and words[2] in staged
+            and words[-2:] == [words[2], "~/.local/bin/%s" % name]]:
         sys.exit("exec did not move the staged %s onto ~/.local/bin/%s" % (name, name))
 last_scp = max(index for index, (kind, _) in enumerate(events) if kind == "scp")
 last_ssh = max(index for index, (kind, _) in enumerate(events) if kind == "ssh")
@@ -803,10 +879,11 @@ for line in open(sys.argv[1]):
         current[1].append(line)
 scp = [args for kind, args in events if kind == "scp"]
 ssh = [args for kind, args in events if kind == "ssh"]
-targets = [args[-1] for args in scp]
-if len(targets) != 1 or not targets[0].endswith(":~/.local/bin/agent-desktop-macos-helper.new"):
+targets = [args[-1].split(":", 1)[1] for args in scp]
+if len(targets) != 1 or not (targets[0].startswith("~/.local/bin/agent-desktop-macos-helper.")
+                             and targets[0].endswith(".new")):
     sys.exit("an old guest with a matching CLI did not repair only the missing helper: %r" % scp)
-if any("agent-desktop.new" in args for args in scp):
+if any(path.startswith("~/.local/bin/agent-desktop.") for path in targets):
     sys.exit("an old guest with a matching CLI copied agent-desktop again")
 last_scp = max(index for index, (kind, _) in enumerate(events) if kind == "scp")
 last_ssh = max(index for index, (kind, _) in enumerate(events) if kind == "ssh")
@@ -849,6 +926,14 @@ run_ok_with FAKE_SSH_BEHAVIOR granted status demo
 [ "$(stat -f %m "$AD_SANDBOX_DIR/setup_done")" = "$setup_time" ] || \
   fail 'a later status probe moved the setup time that orders automatic clone sources'
 
+rm -f "$AD_SANDBOX_DIR/setup_done"
+mkdir "$AD_SANDBOX_DIR/setup_done"
+status=0
+run_provider_with FAKE_SSH_BEHAVIOR granted status demo > "$tmp/out" 2> "$tmp/err" || status=$?
+rmdir "$AD_SANDBOX_DIR/setup_done"
+[ "$status" = 1 ] || fail "status reported guest setup complete although its record could not be written: $(cat "$tmp/out" "$tmp/err")"
+assert_field "$tmp/out" code ACTION_FAILED 'status when the setup record cannot be written'
+
 : > "$AD_SANDBOX_DIR/setup_done"
 FAKE_SCP_BEHAVIOR=prompt
 export FAKE_SCP_BEHAVIOR
@@ -856,6 +941,53 @@ run_ok_with FAKE_SSH_BEHAVIOR quiet exec demo -- snapshot
 unset FAKE_SCP_BEHAVIOR
 grep -qx 'guest output' "$tmp/out" || \
   fail "exec did not carry a quiet remote command past the status probe bound: $(cat "$tmp/out" "$tmp/err")"
+
+status=0
+run_provider_with FAKE_SSH_BEHAVIOR unreachable exec demo -- snapshot > "$tmp/out" 2> "$tmp/err" || status=$?
+[ "$status" = 125 ] || fail "exec with Remote Login refused exited $status: $(cat "$tmp/out" "$tmp/err")"
+assert_field "$tmp/out" message 'Remote Login could not be reached in sandbox demo.' 'exec when Remote Login refuses the probe'
+
+FAKE_GUEST_EXIT=255
+export FAKE_GUEST_EXIT
+: > "$FAKE_LOG"
+status=0
+run_provider exec demo -- snapshot > "$tmp/out" 2> "$tmp/err" || status=$?
+unset FAKE_GUEST_EXIT
+[ "$status" = 255 ] || fail "exec reported a guest exit of 255 as $status: $(cat "$tmp/out" "$tmp/err")"
+printf 'guest output\n' | cmp -s - "$tmp/out" || fail "exec changed the guest's stdout: $(cat "$tmp/out")"
+for stale in "$AD_SANDBOX_DIR"/exec-stderr.*; do
+  [ ! -e "$stale" ] || fail 'exec left its stderr capture behind'
+done
+
+: > "$FAKE_LOG"
+run_ok exec demo -- snapshot
+run_ok exec demo -- snapshot
+status=0
+run_provider_with FAKE_SCP_BEHAVIOR fail exec demo -- snapshot > "$tmp/out" 2> "$tmp/err" || status=$?
+[ "$status" = 125 ] || fail "exec with a failed copy exited $status: $(cat "$tmp/out" "$tmp/err")"
+python3 - "$FAKE_LOG" <<'PY'
+import shlex
+import sys
+
+events = []
+current = None
+for line in open(sys.argv[1]):
+    line = line.rstrip("\n")
+    if line.startswith("BEGIN ") and current is None:
+        current = [line[len("BEGIN "):], []]
+    elif line == "END" and current is not None:
+        events.append((current[0], current[1]))
+        current = None
+    elif current is not None:
+        current[1].append(line)
+scp = [args for kind, args in events if kind == "scp"]
+ssh = [shlex.split(args[-1]) for kind, args in events if kind == "ssh" and args]
+staged = [args[-1].split(":", 1)[1] for args in scp]
+if len(staged) != 5 or len(set(staged)) != len(staged):
+    sys.exit("separate exec calls shared a staging name: %r" % staged)
+if ["rm", "-f", staged[-1]] not in ssh:
+    sys.exit("a failed copy did not remove its staging file %s" % staged[-1])
+PY
 
 status=0
 run_provider_with VMHOST "$tmp/no-vmhost" status demo > "$tmp/out" 2> "$tmp/err" || status=$?

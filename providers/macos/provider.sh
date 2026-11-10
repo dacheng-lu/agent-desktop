@@ -219,7 +219,10 @@ job_is_running() {
   JOB_PID=$(cat "$VM_DIR/install.pid" 2>/dev/null || true)
   case $JOB_PID in ''|*[!0-9]*) return 2 ;; esac
   case $JOB_PID in *[1-9]*) ;; *) return 2 ;; esac
-  kill -0 "$JOB_PID" 2>/dev/null || return 2
+  if ! kill -0 "$JOB_PID" 2>/dev/null; then
+    kill -0 -- "-$JOB_PID" 2>/dev/null && return 0
+    return 2
+  fi
   JOB_COMMAND=$(ps -ww -o command= -p "$JOB_PID" 2>/dev/null || true)
   case $JOB_COMMAND in *"$SCRIPT_PATH __install_job "*|*"$SCRIPT_PATH __install_job") return 0 ;; *) return 2 ;; esac
 }
@@ -551,9 +554,11 @@ start_install_job() {
     emit_fail ACTION_FAILED "The host cannot detach the macOS installation job." "Install the standard macOS command-line tools, then run agent-desktop sandbox create $name again."
     return 1
   fi
+  set -m
   nohup sh "$SCRIPT_PATH" __install_job "$mode" "$ipsw" "$cache_dir" "$guest_user" \
     >> "$VM_DIR/install.log" 2>&1 < /dev/null &
   install_job_pid=$!
+  set +m
   if ! printf '%s\n' "$install_job_pid" > "$VM_DIR/install.pid"; then
     kill -TERM "$install_job_pid" 2>/dev/null || true
     emit_fail ACTION_FAILED "The installation process for sandbox $name could not be recorded." "Run agent-desktop sandbox status $name."
@@ -569,12 +574,25 @@ reject_empty_setting() {
   fi
 }
 
+reject_unknown_settings() {
+  for setting_name in $(env | sed -n 's/^AD_SET_\([A-Z0-9_]*\)=.*/\1/p'); do
+    case $setting_name in
+      IPSW|FROM|USER) ;;
+      *)
+        emit_fail INVALID_ARGS "Unknown setting $(printf '%s' "$setting_name" | tr 'A-Z' 'a-z')." "Pass --set with one of these keys: ipsw, from, user."
+        return 1
+        ;;
+    esac
+  done
+}
+
 do_create() {
   name=${1:-}
   if ! valid_name "$name"; then
     emit_fail INVALID_ARGS "The create verb needs a valid sandbox name." "Run agent-desktop sandbox create <name> --provider macos."
     return 1
   fi
+  reject_unknown_settings || return 1
   reject_empty_setting "${AD_SET_IPSW+x}" "${AD_SET_IPSW:-}" ipsw "$name" || return 1
   reject_empty_setting "${AD_SET_FROM+x}" "${AD_SET_FROM:-}" from "$name" || return 1
   reject_empty_setting "${AD_SET_USER+x}" "${AD_SET_USER:-}" user "$name" || return 1
@@ -737,7 +755,10 @@ check_guest_setup() {
   compact=$(printf '%s' "$permissions" | tr -d '[:space:]')
   case $compact in
     *'"accessibility":{"state":"granted"'*)
-      [ -f "$AD_SANDBOX_DIR/setup_done" ] || : > "$AD_SANDBOX_DIR/setup_done"
+      if [ ! -f "$AD_SANDBOX_DIR/setup_done" ] && ! printf '' > "$AD_SANDBOX_DIR/setup_done"; then
+        emit_fail ACTION_FAILED "The setup record for sandbox $name could not be saved." "Run agent-desktop sandbox status $name again after checking directory permissions."
+        return 1
+      fi
       emit_ok running "Sandbox $name is running and guest setup is complete."
       ;;
     *) needs_setup "Accessibility permission is not granted for agent-desktop in the guest." "$name" ;;
@@ -941,12 +962,17 @@ sync_guest_file() {
   host_hash=$4
   guest_hash=$5
   if [ "$host_hash" = "$guest_hash" ]; then return 0; fi
-  staged="~/.local/bin/$guest_name.new"
+  staged="~/.local/bin/$guest_name.$$.new"
   if ! guest_transport ssh probe "$target" 'mkdir -p ~/.local/bin' >/dev/null || \
     ! guest_transport scp long "$source_file" "$target:$staged" >/dev/null || \
     ! guest_transport ssh probe "$target" "chmod 755 $staged && mv -f $staged ~/.local/bin/$guest_name" >/dev/null; then
+    guest_transport ssh probe "$target" "rm -f $staged" >/dev/null 2>&1 || true
     return 1
   fi
+}
+
+remote_login_failure() {
+  exec_failure "Remote Login could not be reached in sandbox $1." "Run agent-desktop sandbox status $1."
 }
 
 exec_failure() {
@@ -1007,9 +1033,13 @@ do_exec() {
   host_hash=$(printf '%s\n' "$host_hash_line" | awk '{ print tolower($1) }')
   host_helper_hash=$(printf '%s\n' "$host_helper_hash_line" | awk '{ print tolower($1) }')
   target=$user@$ip
-  guest_hash_line=$(guest_transport ssh probe "$target" 'shasum -a 1 ~/.local/bin/agent-desktop' 2>/dev/null || true)
+  probe_status=0
+  guest_hash_line=$(guest_transport ssh probe "$target" 'shasum -a 1 ~/.local/bin/agent-desktop' 2>/dev/null) || probe_status=$?
+  if [ "$probe_status" -eq 255 ]; then remote_login_failure "$name"; fi
   guest_hash=$(printf '%s\n' "$guest_hash_line" | awk '{ print tolower($1) }')
-  guest_helper_hash_line=$(guest_transport ssh probe "$target" "shasum -a 1 ~/.local/bin/$HELPER_NAME" 2>/dev/null || true)
+  probe_status=0
+  guest_helper_hash_line=$(guest_transport ssh probe "$target" "shasum -a 1 ~/.local/bin/$HELPER_NAME" 2>/dev/null) || probe_status=$?
+  if [ "$probe_status" -eq 255 ]; then remote_login_failure "$name"; fi
   guest_helper_hash=$(printf '%s\n' "$guest_helper_hash_line" | awk '{ print tolower($1) }')
   if ! sync_guest_file "$target" "$AD_BINARY" agent-desktop "$host_hash" "$guest_hash"; then
     exec_failure "agent-desktop could not be copied into sandbox $name." "Run agent-desktop sandbox status $name."
@@ -1017,14 +1047,22 @@ do_exec() {
   if ! sync_guest_file "$target" "$host_helper" "$HELPER_NAME" "$host_helper_hash" "$guest_helper_hash"; then
     exec_failure "The macOS clipboard helper could not be copied into sandbox $name." "Run agent-desktop sandbox status $name."
   fi
+  exec_marker="AD_EXEC_EXIT_$$"
   remote_command='~/.local/bin/agent-desktop'
   for argument do
     remote_command="$remote_command $(shell_quote "$argument")"
   done
+  remote_command="$remote_command; ad_status=\$?; printf '%s:%s\\n' '$exec_marker' \"\$ad_status\" >&2; exit \"\$ad_status\""
+  if ! exec_stderr=$(mktemp "$AD_SANDBOX_DIR/exec-stderr.XXXXXX"); then
+    exec_failure "The exec output file for sandbox $name could not be created." "Run agent-desktop sandbox status $name."
+  fi
+  trap 'rm -f "$exec_stderr"' EXIT
   ssh_status=0
-  guest_transport ssh long "$target" "$remote_command" || ssh_status=$?
-  if [ "$ssh_status" -eq 255 ]; then
-    exec_failure "Remote Login could not be reached in sandbox $name." "Run agent-desktop sandbox status $name."
+  guest_transport ssh long "$target" "$remote_command" 2> "$exec_stderr" || ssh_status=$?
+  guest_status=$(sed -n "s/^.*$exec_marker:\([0-9][0-9]*\)\$/\1/p" "$exec_stderr" | tail -n 1)
+  sed -e "/^$exec_marker:[0-9][0-9]*\$/d" -e "s/$exec_marker:[0-9][0-9]*\$//" "$exec_stderr" >&2
+  if [ "$ssh_status" -eq 255 ] && [ -z "$guest_status" ]; then
+    remote_login_failure "$name"
   fi
   return "$ssh_status"
 }

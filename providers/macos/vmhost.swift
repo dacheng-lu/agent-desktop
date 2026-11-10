@@ -24,6 +24,7 @@ struct Bundle {
     var share: URL { root.appendingPathComponent("share", isDirectory: true) }
     var pidFile: URL { root.appendingPathComponent("vmhost.pid") }
     var startedFile: URL { root.appendingPathComponent("vmhost.started") }
+    var lockFile: URL { root.appendingPathComponent("vmhost.lock") }
     var installLog: URL { root.appendingPathComponent("install.log") }
 }
 
@@ -134,6 +135,24 @@ enum PidFile {
 
     static func clear(at url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+}
+
+enum RunLock {
+    private static var descriptor: Int32 = -1
+
+    static func acquire(_ bundle: Bundle) throws {
+        let fd = open(bundle.lockFile.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else {
+            throw VMError(message: "vmhost cannot open \(bundle.lockFile.lastPathComponent).",
+                          suggestion: "Check that the sandbox directory is writable, then run `agent-desktop sandbox start \(bundle.sandboxName)` again.")
+        }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            close(fd)
+            throw VMError(message: "The sandbox \(bundle.sandboxName) is already running.",
+                          suggestion: "Run `agent-desktop sandbox stop \(bundle.sandboxName)`, then start it again.")
+        }
+        descriptor = fd
     }
 }
 
@@ -407,7 +426,7 @@ struct InstallCommand {
     }
 
     static func prepare(_ bundle: Bundle) throws {
-        let bookkeeping: Set<String> = ["install.log", "install.pid", "share"]
+        let bookkeeping: Set<String> = ["install.log", "install.pid", "share", "vmhost.lock"]
         if FileManager.default.fileExists(atPath: bundle.root.path) {
             let contents = (try? FileManager.default.contentsOfDirectory(atPath: bundle.root.path)) ?? []
             guard contents.allSatisfy(bookkeeping.contains) else {
@@ -544,6 +563,7 @@ struct RunCommand {
         let bundle = Bundle(arguments[0])
         let showWindow = arguments.count == 2
 
+        try RunLock.acquire(bundle)
         if let pid = PidFile.liveProcess(in: bundle) {
             throw VMError(message: "The sandbox \(bundle.sandboxName) is already running with pid \(pid).",
                           suggestion: "Run `agent-desktop sandbox stop \(bundle.sandboxName)`, then start it again.")
