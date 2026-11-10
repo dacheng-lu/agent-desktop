@@ -719,7 +719,7 @@ check_guest_setup() {
   compact=$(printf '%s' "$permissions" | tr -d '[:space:]')
   case $compact in
     *'"accessibility":{"state":"granted"'*)
-      : > "$AD_SANDBOX_DIR/setup_done"
+      [ -f "$AD_SANDBOX_DIR/setup_done" ] || : > "$AD_SANDBOX_DIR/setup_done"
       emit_ok running "Sandbox $name is running and guest setup is complete."
       ;;
     *) needs_setup "Accessibility permission is not granted for agent-desktop in the guest." "$name" ;;

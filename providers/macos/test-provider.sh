@@ -176,6 +176,10 @@ for arg in "$@"; do
 done
 if [ -z "$batch" ]; then sleep 40; exit 255; fi
 case ${FAKE_SSH_BEHAVIOR:-echo} in
+  granted)
+    printf '{"ok":true,"data":{"accessibility":{"state":"granted"}}}\n'
+    exit 0
+    ;;
   unreachable)
     if [ -z "$connect_timeout" ]; then sleep 40; fi
     exit 255
@@ -790,6 +794,15 @@ probe_elapsed=$(( $(date +%s) - probe_started ))
 assert_field "$tmp/out" state needs_setup 'status against an unreachable guest'
 [ "$probe_elapsed" -lt 25 ] || \
   fail "status blocked ${probe_elapsed}s on an unreachable guest instead of using a bounded connect timeout"
+
+run_ok_with FAKE_SSH_BEHAVIOR granted status demo
+assert_field "$tmp/out" state running 'status against a guest with Accessibility granted'
+[ -f "$AD_SANDBOX_DIR/setup_done" ] || fail 'a completed guest setup was not recorded'
+touch -t 202001010000 "$AD_SANDBOX_DIR/setup_done"
+setup_time=$(stat -f %m "$AD_SANDBOX_DIR/setup_done")
+run_ok_with FAKE_SSH_BEHAVIOR granted status demo
+[ "$(stat -f %m "$AD_SANDBOX_DIR/setup_done")" = "$setup_time" ] || \
+  fail 'a later status probe moved the setup time that orders automatic clone sources'
 
 : > "$AD_SANDBOX_DIR/setup_done"
 FAKE_SCP_BEHAVIOR=prompt
