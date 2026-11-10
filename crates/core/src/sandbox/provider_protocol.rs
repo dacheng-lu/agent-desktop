@@ -136,6 +136,11 @@ pub(crate) fn next_step(provider: &str, name: Option<&str>) -> String {
     }
 }
 
+/// Whether the provider finished with a reply that says if the verb succeeded.
+pub(crate) fn provider_answered(output: &ProviderScriptOutput) -> bool {
+    reply_value(&output.stdout).is_some_and(|value| value.get("ok").is_some_and(Value::is_boolean))
+}
+
 fn reply_value(stdout: &[u8]) -> Option<Value> {
     let text = String::from_utf8_lossy(stdout);
     let line = text.lines().rev().find(|line| !line.trim().is_empty())?;

@@ -26,6 +26,7 @@ pub(crate) fn run_provider_script(
         .current_dir(&request.working_dir)
         .stdin(Stdio::null());
 
+    super::interrupt::forward_to_active_group();
     let output = run_with_deadline(&mut command, "Provider script", deadline)
         .map_err(|error| map_runner_error(error, request))?;
     let stderr_start = output.stderr.len().saturating_sub(4096);
