@@ -228,6 +228,8 @@ agent-desktop sandbox rm dev-1 --provider macos-vm
 
 `--provider` is for that recovery only. A healthy record supplies its own provider, and a different value is refused. Removal still asks the provider first, so a running sandbox is refused and its data stays. Without `--provider`, the same broken record returns `INVALID_ARGS` with the recovery command in `suggestion`.
 
+A record that names a provider this build does not know is also `broken`, with the recorded `provider` shown. Remove it with the agent-desktop build that created it. If the record itself is wrong, `sandbox rm <name> --provider <provider>` accepts the provider that created the sandbox.
+
 ## status, permissions, version
 
 - `status` returns adapter health, platform, the permission report, `supported_surfaces`, the latest snapshot (`snapshot_id`, `ref_count`), `session_id`, `tracing`, `state_root`.

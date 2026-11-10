@@ -64,6 +64,8 @@ The removed `retry_command` field has no compatibility alias.
 
 A broken entry whose record is malformed or missing omits `provider` and puts the recovery command in `next`. Use `sandbox rm <name> --provider <provider>` with the provider that created the sandbox. A healthy record supplies its own provider, and a different value is refused. Without `--provider`, the same condition returns `INVALID_ARGS` with that recovery command in `suggestion`.
 
+A record that names a provider this build does not know keeps `provider` in its broken entry and recovers the same way: `next` and the `INVALID_ARGS` suggestion name `--provider`, and a known provider passed there removes the sandbox.
+
 `sandbox exec` passes the guest command's stdout and exit status through unchanged instead of adding an envelope. A provider failure returns a host error envelope instead.
 
 ## Disposition values
