@@ -1,5 +1,6 @@
 use agent_desktop_core::{
-    AppError, PlatformAdapter, commands::sandbox, commands::sandbox_action::SandboxAction,
+    AppError, ExecPassthrough, PlatformAdapter, commands::sandbox,
+    commands::sandbox_action::SandboxAction,
 };
 use serde_json::Value;
 use std::io::Write;
@@ -44,18 +45,26 @@ pub(crate) fn run_exec(
     cmd_name: &str,
     adapter: &dyn PlatformAdapter,
 ) -> ExitCode {
-    let result = reject_outer_options(cli)
-        .and_then(|()| {
-            agent_desktop_core::validate_state_root_env().map_err(crate::pre_dispatch_error)
-        })
-        .and_then(|()| sandbox::execute_exec(args.name.clone(), args.args.clone(), adapter));
-    match result {
+    match exec_passthrough(cli, args, adapter) {
         Ok(passthrough) => match write_stdout(&passthrough.stdout) {
             Ok(()) => exit_code(passthrough.status),
             Err(error) => crate::report_output_failure(error),
         },
         Err(error) => crate::finish(cmd_name, Err(error)),
     }
+}
+
+fn exec_passthrough(
+    cli: &crate::Cli,
+    args: &SandboxExecArgs,
+    adapter: &dyn PlatformAdapter,
+) -> Result<ExecPassthrough, AppError> {
+    reject_outer_options(cli)
+        .and_then(|()| {
+            agent_desktop_core::validate_state_root_env().map_err(crate::pre_dispatch_error)
+        })
+        .and_then(|()| sandbox::execute_exec(args.name.clone(), args.args.clone(), adapter))
+        .map_err(|error| super::disposition::settle_unknown_delivery(error, false))
 }
 
 fn write_stdout(bytes: &[u8]) -> std::io::Result<()> {

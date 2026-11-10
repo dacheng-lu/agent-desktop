@@ -113,6 +113,19 @@ fn invalid_record(name: &str) -> AppError {
     )
 }
 
+pub(crate) fn missing_record(name: &str) -> AppError {
+    AppError::Adapter(
+        AdapterError::new(
+            ErrorCode::InvalidArgs,
+            format!("The sandbox directory {name} exists but its record file is missing."),
+        )
+        .with_suggestion(format!(
+            "Run `agent-desktop sandbox rm {name} --provider <provider>` with the provider that created it."
+        ))
+        .with_disposition(DeliverySemantics::not_delivered()),
+    )
+}
+
 pub(crate) fn not_found(name: &str) -> AppError {
     AppError::Adapter(
         AdapterError::new(

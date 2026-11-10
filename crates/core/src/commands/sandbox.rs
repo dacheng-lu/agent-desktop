@@ -239,10 +239,22 @@ fn status_reply(
 }
 
 fn locate(root: &Path, name: &str) -> Result<(&'static ProviderSpec, PathBuf, PathBuf), AppError> {
-    let record = sandbox_store::load(&root.join(SANDBOXES_DIR), name)?;
+    let record = sandbox_store::load(&root.join(SANDBOXES_DIR), name)
+        .map_err(|error| recordless_directory(error, &root.join(SANDBOXES_DIR), name))?;
     let spec = recorded_provider(&record)?;
     let (provider_dir, sandboxes_root) = resolve(root, spec)?;
     Ok((spec, provider_dir, sandboxes_root))
+}
+
+/// Reports a sandbox directory that lost its record as broken, the way `sandbox list` shows it.
+fn recordless_directory(error: AppError, sandboxes_root: &Path, name: &str) -> AppError {
+    let directory_exists = std::fs::symlink_metadata(sandboxes_root.join(name))
+        .is_ok_and(|metadata| metadata.is_dir());
+    if directory_exists && error.code() == ErrorCode::SandboxNotFound.as_str() {
+        sandbox_store::missing_record(name)
+    } else {
+        error
+    }
 }
 
 fn recorded_provider(record: &SandboxRecord) -> Result<&'static ProviderSpec, AppError> {
@@ -313,7 +325,7 @@ fn broken_entry(record: &SandboxRecord, error: &AppError) -> Value {
 fn broken_record_entry(name: &str, error: &AppError) -> Value {
     let (message, next) = if error.code() == ErrorCode::SandboxNotFound.as_str() {
         (
-            format!("The sandbox directory {name} exists but its record file is missing."),
+            sandbox_store::missing_record(name).to_string(),
             recovery_next(name),
         )
     } else if error.code() == ErrorCode::InvalidArgs.as_str() {
