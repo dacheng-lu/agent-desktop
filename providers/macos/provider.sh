@@ -707,8 +707,19 @@ setup_window() {
   needs_setup "Sandbox $1 is running in a setup window; enable Remote Login, run guest-setup.sh in Terminal, and grant Accessibility permission." "$1"
 }
 
+ssh_refused_too_long() {
+  [ -f "$VM_DIR/ssh_refused" ] || printf '' > "$VM_DIR/ssh_refused" 2>/dev/null || return 1
+  refused_since=$(file_mtime "$VM_DIR/ssh_refused")
+  case $refused_since in ''|*[!0-9]*|0) return 1 ;; esac
+  [ $(( $(date +%s) - refused_since )) -ge 120 ]
+}
+
 guest_not_answering() {
   if [ -f "$AD_SANDBOX_DIR/setup_done" ]; then
+    if [ -n "${2:-}" ] && ssh_refused_too_long; then
+      needs_setup "Sandbox $1 has had a network address for over two minutes, but Remote Login refuses the guest user $2. Check in the guest that Remote Login is on and that this account exists." "$1"
+      return 0
+    fi
     emit_ok working "Sandbox $1 is running and the guest is still starting." "agent-desktop sandbox status $1"
   else
     needs_setup "Remote Login is unreachable, agent-desktop is not installed, and Accessibility is not granted in the guest." "$1"
@@ -745,9 +756,10 @@ check_guest_setup() {
   probe_status=0
   permissions=$(guest_transport ssh probe "$target" 'if [ ! -x ~/.local/bin/agent-desktop ]; then exit 3; fi; ~/.local/bin/agent-desktop permissions' 2>/dev/null) || probe_status=$?
   if [ "$probe_status" -eq 255 ]; then
-    guest_not_answering "$name"
+    guest_not_answering "$name" "$user"
     return 0
   fi
+  rm -f "$VM_DIR/ssh_refused"
   if [ "$probe_status" -eq 3 ]; then
     missing_guest_binary "$name"
     return 0
@@ -794,10 +806,24 @@ installation_gate() {
   return 1
 }
 
+start_in_progress() {
+  launching_pid=$(cat "$VM_DIR/vmhost.launching" 2>/dev/null || true)
+  case $launching_pid in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$launching_pid" 2>/dev/null
+}
+
 launch_vmhost() {
+  if ! printf '%s\n' "$$" > "$VM_DIR/vmhost.launching"; then return 1; fi
+  launch_status=0
+  spawn_vmhost "$1" || launch_status=$?
+  rm -f "$VM_DIR/vmhost.launching"
+  return "$launch_status"
+}
+
+spawn_vmhost() {
   mode=$1
   if [ ! -x "$VMHOST" ] || ! command -v nohup >/dev/null 2>&1 || \
-    ! : >> "$VM_DIR/vmhost.log" || ! rm -f "$VM_DIR/vmhost.started"; then
+    ! : >> "$VM_DIR/vmhost.log" || ! rm -f "$VM_DIR/vmhost.started" "$VM_DIR/ssh_refused"; then
     return 1
   fi
   if [ "$mode" = window ]; then
@@ -864,6 +890,10 @@ do_stop() {
   name=${1:-}
   if ! valid_name "$name"; then
     emit_fail INVALID_ARGS "The stop verb needs a valid sandbox name." "Run agent-desktop sandbox stop <name>."
+    return 1
+  fi
+  if start_in_progress; then
+    emit_fail ACTION_FAILED "Sandbox $name is still starting, so it was not stopped." "Run agent-desktop sandbox stop $name again once the start finishes."
     return 1
   fi
   vm_state=$(vm_process_state "$VM_DIR/vmhost.pid")
@@ -934,6 +964,10 @@ do_rm() {
   fi
   if job_is_running; then
     emit_fail ACTION_FAILED "Sandbox $name is still installing, so it was not removed." "Run \`agent-desktop sandbox status $name\` and remove it after the install finishes or fails."
+    return 1
+  fi
+  if start_in_progress; then
+    emit_fail ACTION_FAILED "Sandbox $name is still starting, so it was not removed." "Run \`agent-desktop sandbox status $name\`, then stop it before removing it."
     return 1
   fi
   vm_state=$(vm_process_state "$VM_DIR/vmhost.pid")

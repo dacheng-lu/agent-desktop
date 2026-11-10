@@ -926,6 +926,26 @@ run_ok_with FAKE_SSH_BEHAVIOR granted status demo
 [ "$(stat -f %m "$AD_SANDBOX_DIR/setup_done")" = "$setup_time" ] || \
   fail 'a later status probe moved the setup time that orders automatic clone sources'
 
+run_ok_with FAKE_SSH_BEHAVIOR unreachable status demo
+assert_field "$tmp/out" state working 'status when a set-up guest first refuses Remote Login'
+touch -t 202001010000 "$AD_SANDBOX_DIR/vm/ssh_refused"
+run_ok_with FAKE_SSH_BEHAVIOR unreachable status demo
+assert_field "$tmp/out" state needs_setup 'status when a set-up guest has refused Remote Login for minutes'
+grep -q 'Remote Login refuses the guest user' "$tmp/out" || \
+  fail "a long Remote Login refusal was not named: $(cat "$tmp/out")"
+run_ok_with FAKE_SSH_BEHAVIOR granted status demo
+[ ! -e "$AD_SANDBOX_DIR/vm/ssh_refused" ] || fail 'an answering guest kept its Remote Login refusal record'
+
+printf '%s\n' "$$" > "$AD_SANDBOX_DIR/vm/vmhost.launching"
+for verb in stop rm; do
+  status=0
+  run_provider "$verb" demo > "$tmp/out" 2> "$tmp/err" || status=$?
+  [ "$status" = 1 ] || fail "$verb during a start exited $status: $(cat "$tmp/out")"
+  grep -q 'still starting' "$tmp/out" || fail "$verb during a start did not say so: $(cat "$tmp/out")"
+done
+[ -d "$AD_SANDBOX_DIR/vm" ] || fail 'rm during a start removed the VM files'
+rm -f "$AD_SANDBOX_DIR/vm/vmhost.launching"
+
 rm -f "$AD_SANDBOX_DIR/setup_done"
 mkdir "$AD_SANDBOX_DIR/setup_done"
 status=0

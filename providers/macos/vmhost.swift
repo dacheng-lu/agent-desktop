@@ -530,8 +530,17 @@ final class VMHostDelegate: NSObject, VZVirtualMachineDelegate, @unchecked Senda
     }
 }
 
+final class WindowCloseDelegate: NSObject, NSWindowDelegate {
+    var onClose: () -> Void = {}
+
+    func windowWillClose(_ notification: Notification) {
+        onClose()
+    }
+}
+
 struct SandboxWindow {
     let window: NSWindow
+    let closeDelegate = WindowCloseDelegate()
 
     static func make(bundle: Bundle, machine: VZVirtualMachine) -> SandboxWindow {
         let application = NSApplication.shared
@@ -547,7 +556,9 @@ struct SandboxWindow {
         window.center()
         window.makeKeyAndOrderFront(nil)
         application.activate(ignoringOtherApps: true)
-        return SandboxWindow(window: window)
+        let sandboxWindow = SandboxWindow(window: window)
+        window.delegate = sandboxWindow.closeDelegate
+        return sandboxWindow
     }
 
     func close() {
@@ -607,8 +618,8 @@ struct RunCommand {
         signal(SIGTERM, SIG_IGN)
         let termination = DispatchSource.makeSignalSource(signal: SIGTERM, queue: queue)
         var stopping = false
-        termination.setEventHandler {
-            guard !stopping else { return }
+        let requestStop = {
+            guard !stopping, outcome.value() == nil else { return }
             stopping = true
             if box.machine.canRequestStop {
                 do {
@@ -628,7 +639,9 @@ struct RunCommand {
                 }
             }
         }
+        termination.setEventHandler(handler: requestStop)
         termination.resume()
+        window?.closeDelegate.onClose = requestStop
 
         box.machine.delegate = delegate
         queue.async {
@@ -715,23 +728,24 @@ struct CloneCommand {
 
 enum LeaseTable {
     static func newestAddress(for octets: [Int], in contents: String) -> String? {
-        var newest: String?
+        var leases: [(mine: Bool, address: String, expiry: UInt64)] = []
         var record: [String: String] = [:]
         for line in contents.split(whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed == "{" {
                 record = [:]
             } else if trimmed == "}" {
-                if let hardware = record["hw_address"],
-                   let address = record["ip_address"],
-                   MACAddress.octets(hardware) == octets {
-                    newest = address
+                if let hardware = record["hw_address"], let address = record["ip_address"] {
+                    let digits = record["lease"]?.dropFirst(2) ?? ""
+                    leases.append((MACAddress.octets(hardware) == octets, address, UInt64(digits, radix: 16) ?? 0))
                 }
             } else if let separator = trimmed.firstIndex(of: "=") {
                 record[String(trimmed[..<separator])] = String(trimmed[trimmed.index(after: separator)...])
             }
         }
-        return newest
+        guard let newest = leases.filter(\.mine).max(by: { $0.expiry < $1.expiry }) else { return nil }
+        let reassigned = leases.contains { !$0.mine && $0.address == newest.address && $0.expiry > newest.expiry }
+        return reassigned ? nil : newest.address
     }
 }
 

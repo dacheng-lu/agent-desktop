@@ -45,7 +45,7 @@ On a fresh install, `--set user=<name>` sets the guest account name recorded for
 
 The setup is one session at the guest desktop. The provider records it, so clones never repeat it.
 
-1. Run `agent-desktop sandbox start base`. Because the guest setup is not recorded yet, the VM starts with a window on the host and the reply state is `needs_setup`.
+1. Run `agent-desktop sandbox start base`. Because the guest setup is not recorded yet, the VM starts with a window on the host and the reply state is `needs_setup`. Closing that window shuts the VM down; run `start` again to reopen it.
 2. In the guest, open **Terminal** and run `guest-setup.sh` from the shared folder. The host writes that folder to `sandboxes/base/vm/share/` and the VM mounts it read-only. The script adds the sandbox key to `~/.ssh/authorized_keys`, installs agent-desktop and `agent-desktop-macos-helper` at `~/.local/bin`, and requests the macOS permissions it needs.
 3. In the guest, open **System Settings > General > Sharing** and turn on **Remote Login**. agent-desktop reaches the guest over SSH.
 4. In the guest, open **System Settings > Privacy & Security > Accessibility** and allow **sshd-keygen-wrapper**. The setup script prints both of these steps when it finishes.
