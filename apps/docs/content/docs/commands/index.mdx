@@ -1,10 +1,10 @@
 ---
 title: Commands
 navTitle: All commands
-description: All 60 agent-desktop commands by group, with a one-line description and a link to each command's reference entry.
+description: All 61 agent-desktop commands by group, with a one-line description and a link to each command's reference entry.
 ---
 
-agent-desktop has 60 commands in 11 groups. Every command prints one JSON envelope with `version`, `ok`, `command`, and either `data` or `error`; [JSON output](/desktop/json-output) defines it.
+agent-desktop has 61 commands in 12 groups. Every command prints one JSON envelope with `version`, `ok`, `command`, and either `data` or `error`; [JSON output](/desktop/json-output) defines it.
 
 ```bash
 agent-desktop --help               # list every command
@@ -88,6 +88,8 @@ agent-desktop skills get desktop   # the agent usage guide compiled into the bin
     <tr><td><a href="/desktop/commands/system#session"><code>session</code></a></td><td>Start, end, list, and clean up sessions.</td></tr>
     <tr><td><a href="/desktop/commands/system#cursor-overlay"><code>cursor-overlay</code></a></td><td>Configure the presentation-only agent cursor.</td></tr>
     <tr><td><a href="/desktop/commands/system#trace"><code>trace</code></a></td><td>Read merged session trace timelines.</td></tr>
+    <tr><th colSpan="2">Sandboxes</th></tr>
+    <tr><td><a href="/desktop/sandboxes#commands"><code>sandbox</code></a></td><td>Install a provider, then create, start, run commands in, stop, and remove sandboxes.</td></tr>
     <tr><th colSpan="2">Batch</th></tr>
     <tr><td><a href="/desktop/commands/batch#batch"><code>batch</code></a></td><td>Run a bounded, sequential, non-atomic list of commands in one process.</td></tr>
   </tbody>
