@@ -44,7 +44,7 @@ if [ "$#" -gt 0 ]; then shift; fi
 
 require_provider_environment() {
   if [ -z "$AD_PROVIDER_DIR" ]; then
-    emit_fail INVALID_ARGS "agent-desktop did not pass the provider directory this script needs." "Run an agent-desktop install or sandbox command instead of calling the provider directly."
+    emit_fail INVALID_ARGS "agent-desktop did not pass the provider directory this script needs." "Run an agent-desktop sandbox command instead of calling the provider directly."
     exit 1
   fi
   BUILD_DIR=$AD_PROVIDER_DIR/build
@@ -105,7 +105,7 @@ resolve_image_path() {
 host_runtime_supported() {
   architecture=$(uname -m 2>/dev/null || true)
   if [ "$architecture" != arm64 ]; then
-    emit_ok unavailable "macOS VMs need an Apple Silicon Mac." "Use an Apple Silicon Mac, then run agent-desktop install macos-vm."
+    emit_ok unavailable "macOS VMs need an Apple Silicon Mac." "Use an Apple Silicon Mac, then run agent-desktop sandbox install macos."
     return 1
   fi
   if [ "$(sysctl -n kern.hv_support 2>/dev/null || true)" != 1 ]; then
@@ -116,7 +116,7 @@ host_runtime_supported() {
   major=${version%%.*}
   case $major in ''|*[!0-9]*) major=0 ;; esac
   if [ "$major" -lt 13 ]; then
-    emit_ok unavailable "macOS VMs need macOS 13 or later on the host." "Upgrade this Mac to macOS 13 or later, then run agent-desktop install macos-vm."
+    emit_ok unavailable "macOS VMs need macOS 13 or later on the host." "Upgrade this Mac to macOS 13 or later, then run agent-desktop sandbox install macos."
     return 1
   fi
   return 0
@@ -146,7 +146,7 @@ do_check() {
     return 0
   fi
   if ! build_tools_available; then return 0; fi
-  emit_ok missing "The macOS VM host has not been built and signed." "agent-desktop install macos-vm"
+  emit_ok missing "The macOS VM host has not been built and signed." "agent-desktop sandbox install macos"
 }
 
 do_install() {
@@ -157,28 +157,28 @@ do_install() {
   if ! host_runtime_supported; then return 0; fi
   if ! build_tools_available; then return 0; fi
   if ! mkdir -p "$BUILD_DIR" || ! : > "$BUILD_LOG"; then
-    emit_fail ACTION_FAILED "The macOS VM build directory is not writable." "Make $AD_PROVIDER_DIR writable, then run agent-desktop install macos-vm."
+    emit_fail ACTION_FAILED "The macOS VM build directory is not writable." "Make $AD_PROVIDER_DIR writable, then run agent-desktop sandbox install macos."
     return 1
   fi
   if [ ! -f "$AD_PROVIDER_DIR/vmhost.swift" ] || [ ! -f "$AD_PROVIDER_DIR/vm.entitlements" ]; then
     printf '%s\n' "The VM host source or entitlements file is missing from $AD_PROVIDER_DIR." >> "$BUILD_LOG"
-    emit_fail ACTION_FAILED "The macOS VM host could not be installed; see $BUILD_LOG." "Read $BUILD_LOG, then run agent-desktop install macos-vm again."
+    emit_fail ACTION_FAILED "The macOS VM host could not be installed; see $BUILD_LOG." "Read $BUILD_LOG, then run agent-desktop sandbox install macos again."
     return 1
   fi
   if ! xcrun swiftc -O "$AD_PROVIDER_DIR/vmhost.swift" -o "$BUILD_DIR/vmhost" >> "$BUILD_LOG" 2>&1; then
     rm -f "$BUILD_DIR/vmhost"
-    emit_fail ACTION_FAILED "The macOS VM host could not be compiled; see $BUILD_LOG." "Read $BUILD_LOG, then run agent-desktop install macos-vm again."
+    emit_fail ACTION_FAILED "The macOS VM host could not be compiled; see $BUILD_LOG." "Read $BUILD_LOG, then run agent-desktop sandbox install macos again."
     return 1
   fi
   if ! codesign -f -s - --entitlements "$AD_PROVIDER_DIR/vm.entitlements" "$BUILD_DIR/vmhost" >> "$BUILD_LOG" 2>&1; then
     rm -f "$BUILD_DIR/vmhost"
-    emit_fail ACTION_FAILED "The macOS VM host could not be signed; see $BUILD_LOG." "Read $BUILD_LOG, then run agent-desktop install macos-vm again."
+    emit_fail ACTION_FAILED "The macOS VM host could not be signed; see $BUILD_LOG." "Read $BUILD_LOG, then run agent-desktop sandbox install macos again."
     return 1
   fi
   if ! provider_ready; then
     rm -f "$BUILD_DIR/vmhost"
     printf '%s\n' 'The signed VM host does not contain the virtualization entitlement.' >> "$BUILD_LOG"
-    emit_fail ACTION_FAILED "The macOS VM host is missing its virtualization entitlement; see $BUILD_LOG." "Read $BUILD_LOG, then run agent-desktop install macos-vm again."
+    emit_fail ACTION_FAILED "The macOS VM host is missing its virtualization entitlement; see $BUILD_LOG." "Read $BUILD_LOG, then run agent-desktop sandbox install macos again."
     return 1
   fi
   emit_ok ready "The macOS VM host was built and signed; the provider is ready."
@@ -542,7 +542,7 @@ start_install_job() {
   mode=$2
   ipsw=$3
   guest_user=$4
-  cache_dir=$(dirname "$AD_SANDBOX_DIR")/../cache/macos-vm
+  cache_dir=$(dirname "$AD_SANDBOX_DIR")/../cache/macos
   if ! mkdir -p "$VM_DIR" || ! : > "$VM_DIR/install.log"; then
     emit_fail ACTION_FAILED "The installation log for sandbox $name could not be created." "Run agent-desktop sandbox status $name."
     return 1
@@ -565,7 +565,7 @@ start_install_job() {
 do_create() {
   name=${1:-}
   if ! valid_name "$name"; then
-    emit_fail INVALID_ARGS "The create verb needs a valid sandbox name." "Run agent-desktop sandbox create <name> --provider macos-vm."
+    emit_fail INVALID_ARGS "The create verb needs a valid sandbox name." "Run agent-desktop sandbox create <name> --provider macos."
     return 1
   fi
   if target_has_sandbox_data; then
@@ -574,7 +574,7 @@ do_create() {
   fi
   if ! host_runtime_supported; then return 0; fi
   if ! provider_ready; then
-    emit_fail ACTION_FAILED "The macOS VM host is not installed." "Run agent-desktop install macos-vm."
+    emit_fail ACTION_FAILED "The macOS VM host is not installed." "Run agent-desktop sandbox install macos."
     return 1
   fi
   image_path=
@@ -801,7 +801,7 @@ do_start() {
   fi
   if ! host_runtime_supported; then return 0; fi
   if ! provider_ready; then
-    emit_fail ACTION_FAILED "The macOS VM host is not installed." "Run agent-desktop install macos-vm."
+    emit_fail ACTION_FAILED "The macOS VM host is not installed." "Run agent-desktop sandbox install macos."
     return 1
   fi
   if [ -f "$AD_SANDBOX_DIR/setup_done" ]; then
@@ -1044,7 +1044,7 @@ case $verb in
     do_exec "$@" || exit $?
     ;;
   *)
-    emit_fail INVALID_ARGS "The verb is not part of the macOS VM provider contract." "Run agent-desktop install macos-vm or an agent-desktop sandbox command."
+    emit_fail INVALID_ARGS "The verb is not part of the macOS VM provider contract." "Run an agent-desktop sandbox command."
     exit 1
     ;;
 esac

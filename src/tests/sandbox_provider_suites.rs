@@ -23,6 +23,6 @@ fn assert_suite_passes(script: &str) {
 }
 
 #[test]
-fn macos_vm_provider_suite_passes() {
-    assert_suite_passes("providers/macos-vm/test-provider.sh");
+fn macos_provider_suite_passes() {
+    assert_suite_passes("providers/macos/test-provider.sh");
 }

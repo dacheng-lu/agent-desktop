@@ -6,7 +6,7 @@ description: How agent-desktop drives an isolated desktop from the host or insid
 
 A sandbox gives an agent its own desktop. Its apps and accessibility tree are separate from yours, so the agent can work without interacting with your desktop.
 
-The `agent-desktop sandbox` commands manage local macOS VMs through the `macos-vm` provider. Start with [macOS VM setup](/desktop/sandboxes/macos-vm). Linux and Windows have no local provider. [Vercel Sandbox](/desktop/sandboxes/vercel-sandbox) runs a hosted Linux microVM managed through the Vercel SDK instead.
+The `agent-desktop sandbox` commands manage local macOS VMs through the `macos` provider. Start with [macOS VM setup](/desktop/sandboxes/macos). Linux and Windows have no local provider. [Vercel Sandbox](/desktop/sandboxes/vercel-sandbox) runs a hosted Linux microVM managed through the Vercel SDK instead.
 
 ## How commands reach the sandbox
 
@@ -43,8 +43,8 @@ An automation that already runs in `demo` uses the same two commands without `sa
     <tr><th>Command</th><th>What it does</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>install</code></td><td>Report each provider's state.</td></tr>
-    <tr><td><code>install PROVIDER</code></td><td>Satisfy one provider's host requirements, such as compiling its binary.</td></tr>
+    <tr><td><code>sandbox install</code></td><td>Report each provider's state.</td></tr>
+    <tr><td><code>sandbox install PROVIDER</code></td><td>Satisfy one provider's host requirements, such as compiling its binary.</td></tr>
     <tr><td><code>sandbox create NAME --provider PROVIDER</code></td><td>Create a sandbox. Repeat <code>--set key=value</code> to pass provider options.</td></tr>
     <tr><td><code>sandbox start NAME</code></td><td>Start a stopped sandbox.</td></tr>
     <tr><td><code>sandbox status NAME</code></td><td>Report one sandbox's state and its next command.</td></tr>

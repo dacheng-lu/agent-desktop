@@ -1,4 +1,4 @@
 {
   "title": "Sandboxing",
-  "pages": ["index", "macos-vm", "vercel-sandbox"]
+  "pages": ["index", "macos", "vercel-sandbox"]
 }

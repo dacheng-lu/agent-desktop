@@ -4,18 +4,18 @@ navTitle: macOS VM
 description: Install the macOS VM provider, create a macOS guest, complete the one-time setup by hand, and clone the configured VM for later sandboxes.
 ---
 
-The `macos-vm` provider runs a macOS guest in a virtual machine on an Apple Silicon Mac. Only the first sandbox needs a person at the guest desktop; every sandbox you clone from it starts headless and comes up already set up. Cloning a set-up VM has been tested end to end. Creating the first VM from a macOS image is experimental.
+The `macos` provider runs a macOS guest in a virtual machine on an Apple Silicon Mac. Only the first sandbox needs a person at the guest desktop; every sandbox you clone from it starts headless and comes up already set up. Cloning a set-up VM has been tested end to end. Creating the first VM from a macOS image is experimental.
 
 ## Requirements
 
-- An Apple Silicon Mac. On an Intel Mac, `install macos-vm` reports `unavailable`.
+- An Apple Silicon Mac. On an Intel Mac, `sandbox install macos` reports `unavailable`.
 - macOS 13 or later on the host.
 - Xcode Command Line Tools before the first install, because they provide `swiftc`. Install them with `xcode-select --install`. A VM host that is already built and signed needs no compiler, so `check`, `create`, and `start` keep working without them.
 
 ## Install the VM host
 
 ```bash
-agent-desktop install macos-vm                         # compile and sign vmhost
+agent-desktop sandbox install macos                    # compile and sign vmhost
 ```
 
 The command compiles `vmhost.swift`, signs the binary with the virtualization entitlement, and answers `ready`. When the build or the signature fails, the error names the build log to read.
@@ -27,7 +27,7 @@ The provider implements the download, checksum, and install, but no install has 
 </Callout>
 
 ```bash
-agent-desktop sandbox create base --provider macos-vm  # download and install macOS
+agent-desktop sandbox create base --provider macos     # download and install macOS
 agent-desktop sandbox status base                      # repeat until the state changes
 ```
 
@@ -36,7 +36,7 @@ agent-desktop sandbox status base                      # repeat until the state 
 To install an image you already have, pass its path. A relative path resolves from the directory where you run the command. This skips the download.
 
 ```bash
-agent-desktop sandbox create base --provider macos-vm --set ipsw=/path/to/UniversalMac_15.0.ipsw
+agent-desktop sandbox create base --provider macos --set ipsw=/path/to/UniversalMac_15.0.ipsw
 ```
 
 On a fresh install, `--set user=<name>` sets the guest account name recorded for SSH. The default is your user name on the host.
@@ -55,7 +55,7 @@ The setup is one session at the guest desktop. The provider records it, so clone
 
 ```bash
 agent-desktop sandbox stop base                        # a clone needs a stopped source
-agent-desktop sandbox create work --provider macos-vm  # copy the newest set-up VM
+agent-desktop sandbox create work --provider macos     # copy the newest set-up VM
 agent-desktop sandbox start work                       # start it headless
 ```
 

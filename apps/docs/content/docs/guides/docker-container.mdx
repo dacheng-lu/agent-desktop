@@ -4,7 +4,7 @@ navTitle: Docker container
 description: Build an image from the released Linux binary, start a headless Linux desktop inside a container you manage, and run agent-desktop commands against it.
 ---
 
-A container gives agent-desktop its own Linux desktop, so your commands act on apps inside the container instead of the desktop you are using. This guide builds that image from the released Linux binary and drives a text editor inside it. You run the container with Docker; the `sandbox` commands do not manage it, because the shipped provider is the [macOS VM](/desktop/sandboxes/macos-vm).
+A container gives agent-desktop its own Linux desktop, so your commands act on apps inside the container instead of the desktop you are using. This guide builds that image from the released Linux binary and drives a text editor inside it. You run the container with Docker; the `sandbox` commands do not manage it, because the shipped provider is the [macOS VM](/desktop/sandboxes/macos).
 
 ## Requirements
 
@@ -146,5 +146,5 @@ docker image rm agent-desktop-container:1.0.2
 - The desktop is headless: 1280x800 on display `:99`, and nothing appears on your screen.
 - The image runs as the user `agent`, and everything agent-desktop stores lives in that user's `~/.agent-desktop`. Removing the container removes that state.
 - The binary must match the container's architecture. Build on the machine that runs the container, or pass `--platform` to `docker run` and download the matching archive.
-- `sandbox` commands are not available in the container, because `macos-vm` needs macOS. Use the container's desktop directly, as above.
+- `sandbox` commands are not available in the container, because the `macos` provider needs macOS. Use the container's desktop directly, as above.
 - Running the container on a remote host is a manual setup today. A remote option is coming.

@@ -305,7 +305,7 @@ chmod 0555 "$locked_dir"
 status=0
 run_provider_with AD_PROVIDER_DIR "$locked_dir" install > "$tmp/out" 2> "$tmp/err" || status=$?
 [ "$status" = 1 ] || fail "install into an unwritable directory exited $status: $(cat "$tmp/out" "$tmp/err")"
-assert_field "$tmp/out" suggestion "Make $locked_dir writable, then run agent-desktop install macos-vm." \
+assert_field "$tmp/out" suggestion "Make $locked_dir writable, then run agent-desktop sandbox install macos." \
   'a provider path holding a backslash and a quote'
 
 printf '#!/bin/sh\nexit 0\n' > "$AD_PROVIDER_DIR/build/vmhost"
@@ -318,7 +318,7 @@ run_ok check
 assert_field "$tmp/out" state ready 'check with a ready host and no Command Line Tools'
 FAKE_SWIFTC_FOUND=1
 
-cache_dir=$tmp/cache/macos-vm
+cache_dir=$tmp/cache/macos
 FAKE_IMAGE_CONTENT='fake macos image payload
 '
 image_sha=$(printf '%s' "$FAKE_IMAGE_CONTENT" | shasum -a 1 | awk '{ print toupper($1) }')

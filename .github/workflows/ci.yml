@@ -135,10 +135,10 @@ jobs:
 
       - name: macOS VM host compiles, signs, and refuses a missing command
         run: |
-          VM_HOST_DIR="$RUNNER_TEMP/macos-vm"
+          VM_HOST_DIR="$RUNNER_TEMP/macos"
           mkdir -p "$VM_HOST_DIR"
-          xcrun swiftc -O providers/macos-vm/vmhost.swift -o "$VM_HOST_DIR/vmhost"
-          codesign -f -s - --entitlements providers/macos-vm/vm.entitlements "$VM_HOST_DIR/vmhost"
+          xcrun swiftc -O providers/macos/vmhost.swift -o "$VM_HOST_DIR/vmhost"
+          codesign -f -s - --entitlements providers/macos/vm.entitlements "$VM_HOST_DIR/vmhost"
           codesign -d --entitlements - "$VM_HOST_DIR/vmhost" 2>&1 | grep -q com.apple.security.virtualization
           set +e
           "$VM_HOST_DIR/vmhost" > "$VM_HOST_DIR/usage.json" 2>&1

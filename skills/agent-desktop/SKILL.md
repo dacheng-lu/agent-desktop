@@ -74,15 +74,15 @@ Ref actions are headless by default. They use semantic accessibility calls and d
 
 ## Sandboxes
 
-A sandbox is a desktop a provider manages on your machine. The provider is `macos-vm`: a macOS VM on an Apple Silicon Mac running macOS 13 or later. Linux and Windows have no provider; to run agent-desktop in a container you manage yourself there, follow `agent-browser.dev/desktop/guides/docker-container`.
+A sandbox is a desktop a provider manages on your machine. The provider is `macos`: a macOS VM on an Apple Silicon Mac running macOS 13 or later. Linux and Windows have no provider; to run agent-desktop in a container you manage yourself there, follow `agent-browser.dev/desktop/guides/docker-container`.
 
 ```sh
-agent-desktop install                                  # report the provider's state
-agent-desktop install macos-vm                         # compile and sign the VM host, then report ready
+agent-desktop sandbox install                          # report the provider's state
+agent-desktop sandbox install macos                    # compile and sign the VM host, then report ready
 ```
 
 ```sh
-agent-desktop sandbox create demo --provider macos-vm  # add --set key=value for provider options
+agent-desktop sandbox create demo --provider macos     # add --set key=value for provider options
 agent-desktop sandbox start demo                       # start the sandbox
 agent-desktop sandbox status demo                      # state, message and next command
 agent-desktop sandbox list                             # every sandbox and its state
@@ -104,7 +104,7 @@ Read `state`, `message` and optional `next`; `ok: true` alone does not mean the 
 - `stopped`: start the sandbox to use it, or remove it.
 - `broken`: follow `next`; a broken sandbox may need removal.
 
-Cloning a configured macOS VM has been tested end to end. Installing the first VM from a macOS image is experimental and has not been verified end to end. Provider setup steps and limits are in the docs: `agent-browser.dev/desktop/sandboxes/macos-vm`.
+Cloning a configured macOS VM has been tested end to end. Installing the first VM from a macOS image is experimental and has not been verified end to end. Provider setup steps and limits are in the docs: `agent-browser.dev/desktop/sandboxes/macos`.
 
 ## References
 
