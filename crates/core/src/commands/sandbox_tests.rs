@@ -102,6 +102,26 @@ fn a_failed_create_leaves_no_record_unless_the_provider_left_files() {
 }
 
 #[test]
+fn a_create_with_no_provider_answer_keeps_its_record_for_status_and_rm() {
+    let timed_out = ScriptedAdapter::new().fail(
+        "create",
+        crate::AdapterError::timeout("the provider did not answer"),
+    );
+    let unreadable = ScriptedAdapter::new().reply("create", "the provider crashed", 1);
+
+    for adapter in [timed_out, unreadable] {
+        let home = HomeGuard::new();
+
+        execute(create_action(), &adapter).expect_err("the create outcome is unknown");
+
+        assert!(
+            sandbox_store::load(&sandboxes_root(&home), "dev-1").is_ok(),
+            "the record stays so the sandbox still lists and can be removed"
+        );
+    }
+}
+
+#[test]
 fn create_on_a_provider_that_cannot_run_here_is_refused_and_leaves_no_record() {
     let home = HomeGuard::new();
     let adapter = ScriptedAdapter::new().reply("create", UNAVAILABLE, 0);

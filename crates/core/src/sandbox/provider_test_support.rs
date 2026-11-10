@@ -22,6 +22,11 @@ impl ScriptedAdapter {
         self
     }
 
+    pub(crate) fn fail(self, verb: &str, error: AdapterError) -> Self {
+        self.insert(verb, Err(error));
+        self
+    }
+
     fn insert(&self, verb: &str, reply: Result<ProviderScriptOutput, AdapterError>) {
         if let Ok(mut replies) = self.replies.lock() {
             replies.insert(verb.to_string(), reply);

@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::sandbox_action::SandboxAction;
 use crate::sandbox::exec_passthrough::ExecPassthrough;
 use crate::sandbox::provider_dirs::{SANDBOXES_DIR, resolve};
-use crate::sandbox::provider_protocol::{exec_outcome, parse_reply};
+use crate::sandbox::provider_protocol::{exec_outcome, parse_reply, provider_answered};
 use crate::sandbox::provider_reply::ProviderReply;
 use crate::sandbox::provider_run::{ProviderCall, success_value};
 use crate::sandbox::provider_settings::parse_settings;
@@ -81,25 +81,31 @@ fn create(
         },
     )?;
     let call = ProviderCall::new(spec, &provider_dir, &sandboxes_root, Some(name), &settings);
-    let outcome = call
+    let output = call
         .run(adapter, verb_args(name, "create"), CREATE_TIMEOUT)
-        .and_then(|output| parse_reply(spec.name, Some(name), true, &output))
+        .inspect_err(|error| {
+            if error.code() != ErrorCode::Timeout.as_str() {
+                discard_untouched_record(&sandboxes_root, name);
+            }
+        })?;
+    let answered = provider_answered(&output);
+    parse_reply(spec.name, Some(name), true, &output)
         .and_then(|reply| {
             if reply.state == SandboxState::Unavailable {
                 Err(unavailable_refusal(reply.message))
             } else {
-                Ok(reply)
+                Ok(success_value(name, Some(spec.name), reply))
             }
-        });
-    match outcome {
-        Ok(reply) => Ok(success_value(name, Some(spec.name), reply)),
-        Err(error) => {
-            discard_untouched_record(&sandboxes_root, name);
-            Err(error)
-        }
-    }
+        })
+        .inspect_err(|_| {
+            if answered {
+                discard_untouched_record(&sandboxes_root, name);
+            }
+        })
 }
 
+/// Drops the record of a create the provider refused. A create that timed out or ended without a readable
+/// reply keeps its record, because the provider may have made something that only `rm` can clear.
 fn discard_untouched_record(sandboxes_root: &Path, name: &str) {
     let dir = sandboxes_root.join(name);
     let Ok(entries) = std::fs::read_dir(&dir) else {
