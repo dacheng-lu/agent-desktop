@@ -23,6 +23,7 @@ struct Bundle {
     var settings: URL { root.appendingPathComponent("config.json") }
     var share: URL { root.appendingPathComponent("share", isDirectory: true) }
     var pidFile: URL { root.appendingPathComponent("vmhost.pid") }
+    var startedFile: URL { root.appendingPathComponent("vmhost.started") }
     var installLog: URL { root.appendingPathComponent("install.log") }
 }
 
@@ -562,7 +563,10 @@ struct RunCommand {
         let inputs = VMInputs(bundle: bundle, config: config, hardwareModel: hardwareModel, machineIdentifier: machineIdentifier, auxiliaryStorage: VZMacAuxiliaryStorage(url: bundle.auxiliaryStorage))
         let configuration = try VMBuilder.configuration(inputs)
         try PidFile.record(at: bundle.pidFile)
-        defer { PidFile.clear(at: bundle.pidFile) }
+        defer {
+            PidFile.clear(at: bundle.pidFile)
+            PidFile.clear(at: bundle.startedFile)
+        }
         try boot(bundle: bundle, configuration: configuration, showWindow: showWindow)
     }
 
@@ -611,6 +615,8 @@ struct RunCommand {
             box.machine.start { result in
                 if case let .failure(error) = result {
                     finish(.failure(error))
+                } else {
+                    FileManager.default.createFile(atPath: bundle.startedFile.path, contents: nil)
                 }
             }
         }

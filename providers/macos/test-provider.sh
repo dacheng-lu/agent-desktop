@@ -85,6 +85,23 @@ case ${1:-} in
     : > "$3/config.json"
     ;;
   ip) printf '{"ok":true,"ip":"192.0.2.2"}\n' ;;
+  run)
+    case ${FAKE_RUN_BEHAVIOR:-} in
+      boot-fails)
+        printf '%s\n' "$$" > "$2/vmhost.pid"
+        sleep 1
+        rm -f "$2/vmhost.pid"
+        exit 1
+        ;;
+      boots)
+        printf '%s\n' "$$" > "$2/vmhost.pid"
+        sleep 1
+        : > "$2/vmhost.started"
+        exec sleep 30
+        ;;
+      *) exit 2 ;;
+    esac
+    ;;
   *) exit 2 ;;
 esac
 FAKE
@@ -585,6 +602,18 @@ grep -q 'absolute-path' "$tmp/out" || fail 'a relative image without caller cont
 grep -q 'BEGIN curl' "$FAKE_LOG" && fail 'a relative image without caller context started a download'
 [ ! -f "$AD_SANDBOX_DIR/vm/install.pid" ] || fail 'a relative image without caller context started an install'
 
+for setting in AD_SET_IPSW AD_SET_FROM AD_SET_USER; do
+  empty_sandbox=$tmp/empty-setting/$setting/demo
+  mkdir -p "$empty_sandbox"
+  : > "$FAKE_LOG"
+  status=0
+  env "$setting=" AD_SANDBOX_DIR="$empty_sandbox" sh "$here/provider.sh" create demo > "$tmp/out" 2> "$tmp/err" || status=$?
+  [ "$status" = 1 ] || fail "create with an empty $setting exited $status: $(cat "$tmp/out" "$tmp/err")"
+  assert_field "$tmp/out" code INVALID_ARGS "create with an empty $setting"
+  [ ! -f "$empty_sandbox/vm/install.pid" ] || fail "create with an empty $setting started an install"
+  grep -q 'BEGIN curl' "$FAKE_LOG" && fail "create with an empty $setting started a download"
+done
+
 rm -rf "$AD_SANDBOX_DIR"
 mkdir -p "$AD_SANDBOX_DIR"
 user_ipsw="$tmp/user image.ipsw"
@@ -662,6 +691,22 @@ printf '999999999\n' > "$AD_SANDBOX_DIR/vm/vmhost.pid"
 : > "$FAKE_LOG"
 run_provider start demo > "$tmp/out" 2> "$tmp/err" || true
 grep -qx 'run' "$FAKE_LOG" || fail "start did not launch the VM host over a dead record: $(cat "$tmp/out" "$tmp/err")"
+
+rm -f "$AD_SANDBOX_DIR/vm/vmhost.pid" "$AD_SANDBOX_DIR/vm/vmhost.started"
+: > "$AD_SANDBOX_DIR/setup_done"
+FAKE_RUN_BEHAVIOR=boot-fails
+export FAKE_RUN_BEHAVIOR
+status=0
+run_provider start demo > "$tmp/out" 2> "$tmp/err" || status=$?
+[ "$status" = 1 ] || fail "start reported success when the VM host failed to boot: $(cat "$tmp/out" "$tmp/err")"
+assert_field "$tmp/out" code ACTION_FAILED 'start of a VM host that failed to boot'
+FAKE_RUN_BEHAVIOR=boots
+export FAKE_RUN_BEHAVIOR
+run_ok start demo
+assert_field "$tmp/out" state running 'start of a VM host that booted'
+kill "$(cat "$AD_SANDBOX_DIR/vm/vmhost.pid")" 2>/dev/null || true
+unset FAKE_RUN_BEHAVIOR
+rm -f "$AD_SANDBOX_DIR/vm/vmhost.pid" "$AD_SANDBOX_DIR/vm/vmhost.started" "$AD_SANDBOX_DIR/setup_done"
 
 printf '1000000000\n' > "$AD_SANDBOX_DIR/vm/download.size"
 mkfile -n 340000000 "$AD_SANDBOX_DIR/vm/latest.ipsw"
@@ -811,6 +856,15 @@ run_ok_with FAKE_SSH_BEHAVIOR quiet exec demo -- snapshot
 unset FAKE_SCP_BEHAVIOR
 grep -qx 'guest output' "$tmp/out" || \
   fail "exec did not carry a quiet remote command past the status probe bound: $(cat "$tmp/out" "$tmp/err")"
+
+status=0
+run_provider_with VMHOST "$tmp/no-vmhost" status demo > "$tmp/out" 2> "$tmp/err" || status=$?
+[ "$status" = 1 ] || fail "status without the VM host binary exited $status: $(cat "$tmp/out" "$tmp/err")"
+assert_field "$tmp/out" code ACTION_FAILED 'status without the VM host binary'
+status=0
+run_provider_with VMHOST "$tmp/no-vmhost" exec demo -- snapshot > "$tmp/out" 2> "$tmp/err" || status=$?
+[ "$status" = 125 ] || fail "exec without the VM host binary exited $status: $(cat "$tmp/out" "$tmp/err")"
+grep -q 'The macOS VM host is not installed\.' "$tmp/out" || fail "exec without the VM host binary did not say so: $(cat "$tmp/out")"
 
 kill "$vm_pid" 2>/dev/null || true
 wait "$vm_pid" 2>/dev/null || true

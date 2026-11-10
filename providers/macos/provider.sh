@@ -562,12 +562,22 @@ start_install_job() {
   emit_ok working "Sandbox $name is installing macOS." "agent-desktop sandbox status $name"
 }
 
+reject_empty_setting() {
+  if [ "$1" = x ] && [ -z "$2" ]; then
+    emit_fail INVALID_ARGS "The $3 setting has no value." "Run agent-desktop sandbox create $4 --set $3=<value>."
+    return 1
+  fi
+}
+
 do_create() {
   name=${1:-}
   if ! valid_name "$name"; then
     emit_fail INVALID_ARGS "The create verb needs a valid sandbox name." "Run agent-desktop sandbox create <name> --provider macos."
     return 1
   fi
+  reject_empty_setting "${AD_SET_IPSW+x}" "${AD_SET_IPSW:-}" ipsw "$name" || return 1
+  reject_empty_setting "${AD_SET_FROM+x}" "${AD_SET_FROM:-}" from "$name" || return 1
+  reject_empty_setting "${AD_SET_USER+x}" "${AD_SET_USER:-}" user "$name" || return 1
   if target_has_sandbox_data; then
     emit_fail ACTION_FAILED "Sandbox $name already has provider data." "Run agent-desktop sandbox status $name."
     return 1
@@ -693,11 +703,19 @@ missing_guest_binary() {
   emit_ok needs_setup "agent-desktop is not installed in the guest, so Accessibility permission cannot yet be checked." "$next"
 }
 
+vmhost_missing() {
+  emit_fail ACTION_FAILED "The macOS VM host is not installed." "Run agent-desktop sandbox install macos."
+}
+
 check_guest_setup() {
   name=$1
   if ! user=$(guest_user); then
     needs_setup "Sandbox $name needs a guest user before SSH setup can continue." "$name"
     return 0
+  fi
+  if [ ! -x "$VMHOST" ]; then
+    vmhost_missing
+    return 1
   fi
   ip_json=$("$VMHOST" ip "$VM_DIR" 2>/dev/null || true)
   ip=$(printf '%s' "$ip_json" | sed -n 's/.*"ip"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
@@ -756,7 +774,7 @@ installation_gate() {
 launch_vmhost() {
   mode=$1
   if [ ! -x "$VMHOST" ] || ! command -v nohup >/dev/null 2>&1 || \
-    ! : >> "$VM_DIR/vmhost.log"; then
+    ! : >> "$VM_DIR/vmhost.log" || ! rm -f "$VM_DIR/vmhost.started"; then
     return 1
   fi
   if [ "$mode" = window ]; then
@@ -766,8 +784,8 @@ launch_vmhost() {
   fi
   launched_pid=$!
   attempts=0
-  while [ "$attempts" -lt 10 ]; do
-    if [ "$(vm_process_state "$VM_DIR/vmhost.pid")" = live ]; then return 0; fi
+  while [ "$attempts" -lt 300 ]; do
+    if [ -f "$VM_DIR/vmhost.started" ] && [ "$(vm_process_state "$VM_DIR/vmhost.pid")" = live ]; then return 0; fi
     kill -0 "$launched_pid" 2>/dev/null || return 1
     sleep 0.1
     attempts=$((attempts + 1))
@@ -967,6 +985,10 @@ do_exec() {
   user=$(guest_user || true)
   if [ -z "$user" ]; then
     exec_failure "Sandbox $name has no configured guest user." "Run agent-desktop sandbox status $name."
+  fi
+  if [ ! -x "$VMHOST" ]; then
+    vmhost_missing
+    exit 125
   fi
   ip_json=$("$VMHOST" ip "$VM_DIR" 2>/dev/null || true)
   ip=$(printf '%s' "$ip_json" | sed -n 's/.*"ip"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
