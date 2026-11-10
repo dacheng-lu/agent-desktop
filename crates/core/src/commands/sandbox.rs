@@ -84,7 +84,7 @@ fn create(
     let output = call
         .run(adapter, verb_args(name, "create"), CREATE_TIMEOUT)
         .inspect_err(|error| {
-            if error.code() != ErrorCode::Timeout.as_str() {
+            if never_ran(error) {
                 discard_untouched_record(&sandboxes_root, name);
             }
         })?;
@@ -103,6 +103,10 @@ fn create(
                 discard_untouched_record(&sandboxes_root, name);
             }
         })
+}
+
+fn never_ran(error: &AppError) -> bool {
+    !matches!(error, AppError::Adapter(source) if source.disposition != DeliverySemantics::not_delivered())
 }
 
 /// Drops the record of a create the provider refused. Every other failed create keeps its record, because

@@ -70,7 +70,8 @@ impl SystemOps for ScriptedAdapter {
                 Err(AdapterError::new(
                     ErrorCode::ActionFailed,
                     format!("The stub adapter has no reply for {verb}."),
-                ))
+                )
+                .with_disposition(crate::DeliverySemantics::not_delivered()))
             })
     }
 }
