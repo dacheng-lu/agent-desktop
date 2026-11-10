@@ -11,10 +11,8 @@ fn item(command: &str) -> BatchCommand {
 }
 
 #[test]
-fn sandbox_and_install_are_refused_inside_a_batch() {
-    for command in ["sandbox", "install"] {
-        let error = parse_command(item(command)).expect_err("batch must refuse the command");
+fn sandbox_is_refused_inside_a_batch() {
+    let error = parse_command(item("sandbox")).expect_err("batch must refuse the command");
 
-        assert_eq!(error.code(), "INVALID_ARGS", "{command}");
-    }
+    assert_eq!(error.code(), "INVALID_ARGS");
 }

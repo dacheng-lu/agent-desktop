@@ -72,5 +72,5 @@ fn unavailable_entry(spec: &ProviderSpec, error: &AppError) -> Value {
 }
 
 #[cfg(test)]
-#[path = "install_tests.rs"]
+#[path = "sandbox_install_tests.rs"]
 mod tests;

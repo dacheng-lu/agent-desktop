@@ -218,7 +218,7 @@ Multi-agent cursors (macOS and Windows): start with `session start --cursor --mu
 
 ## Sandboxes
 
-`agent-desktop install` lists the providers, and `agent-desktop sandbox list` lists the sandboxes with `name`, `state`, `message`, and `next`. A single sandbox command also returns its `provider`.
+`agent-desktop sandbox install` lists the providers, and `agent-desktop sandbox list` lists the sandboxes with `name`, `state`, `message`, and `next`. A single sandbox command also returns its `provider`.
 
 A sandbox whose record is malformed or missing appears in `sandbox list` with `state: "broken"` and no `provider`, because agent-desktop cannot read who owns it. Recover it with the provider that created it:
 

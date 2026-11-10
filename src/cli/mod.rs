@@ -15,7 +15,6 @@ use crate::cli_args::{
     batch::BatchArgs,
     cursor_overlay::CursorOverlayArgs,
     drag::DragCliArgs,
-    install::InstallArgs,
     mouse_wheel::MouseWheelArgs,
     notifications::{
         DismissAllNotificationsCliArgs, DismissNotificationCliArgs, ListNotificationsCliArgs,
@@ -168,10 +167,8 @@ pub(crate) enum Commands {
     CursorOverlay(CursorOverlayArgs),
     #[command(about = "Read merged session trace timelines")]
     Trace(TraceArgs),
-    #[command(about = "Report or install what a sandbox provider needs on this host")]
-    Install(InstallArgs),
     #[command(
-        about = "Create, run, and remove local sandboxes (create, start, stop, status, list, rm, exec)"
+        about = "Install providers and create, run, and remove local sandboxes (install, create, start, stop, status, list, rm, exec)"
     )]
     Sandbox(SandboxArgs),
 }
@@ -256,7 +253,6 @@ impl Commands {
             Self::Session(_) => CommandMetadata::new("session", false),
             Self::CursorOverlay(_) => CommandMetadata::new("cursor-overlay", false),
             Self::Trace(_) => CommandMetadata::new("trace", false),
-            Self::Install(_) => CommandMetadata::new("install", false),
             Self::Sandbox(_) => CommandMetadata::new("sandbox", false),
         }
     }
@@ -311,7 +307,6 @@ impl Commands {
             | Self::NotificationAction(_)
             | Self::ClipboardSet(_)
             | Self::ClipboardClear
-            | Self::Install(_)
             | Self::Batch(_) => true,
             Self::Screenshot(args) => args.output_path.is_some(),
             Self::ClipboardGet(args) => args.out.is_some(),

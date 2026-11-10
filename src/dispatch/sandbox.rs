@@ -74,6 +74,9 @@ fn exit_code(status: i32) -> ExitCode {
 
 fn to_core(action: SandboxActionCli) -> SandboxAction {
     match action {
+        SandboxActionCli::Install(args) => SandboxAction::Install {
+            provider: args.provider,
+        },
         SandboxActionCli::Create(create) => SandboxAction::Create {
             name: create.name,
             provider: create.provider,

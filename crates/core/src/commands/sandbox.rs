@@ -30,6 +30,7 @@ const EXEC_TIMEOUT: Duration = Duration::from_secs(300);
 pub fn execute(action: SandboxAction, adapter: &dyn PlatformAdapter) -> Result<Value, AppError> {
     let root = resolve_configured_state_root()?;
     match action {
+        SandboxAction::Install { provider } => super::sandbox_install::execute(provider, adapter),
         SandboxAction::Create {
             name,
             provider,
@@ -348,7 +349,7 @@ fn recovery_next(name: &str) -> String {
 fn unavailable_refusal(message: String) -> AppError {
     AppError::Adapter(
         AdapterError::new(ErrorCode::PlatformNotSupported, message)
-            .with_suggestion("Run `agent-desktop install` to see what each provider needs.")
+            .with_suggestion("Run `agent-desktop sandbox install` to see what each provider needs.")
             .with_disposition(DeliverySemantics::not_delivered()),
     )
 }

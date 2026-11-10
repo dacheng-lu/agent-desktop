@@ -8,6 +8,8 @@ pub(crate) struct SandboxArgs {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum SandboxActionCli {
+    #[command(about = "Report or install what a sandbox provider needs on this host")]
+    Install(SandboxInstallArgs),
     #[command(about = "Create a sandbox, reusing whatever the provider already installed")]
     Create(SandboxCreateArgs),
     #[command(about = "Start a stopped sandbox")]
@@ -22,6 +24,15 @@ pub(crate) enum SandboxActionCli {
     Rm(SandboxRmArgs),
     #[command(about = "Run agent-desktop inside a sandbox and pass its output through")]
     Exec(SandboxExecArgs),
+}
+
+#[derive(Args, Debug)]
+pub(crate) struct SandboxInstallArgs {
+    #[arg(
+        value_name = "PROVIDER",
+        help = "Provider to install; omit it to report every provider's state"
+    )]
+    pub provider: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -49,7 +60,7 @@ pub(crate) struct SandboxCreateArgs {
     #[arg(
         long,
         value_name = "PROVIDER",
-        help = "Provider that owns the sandbox (macos-vm)"
+        help = "Provider that owns the sandbox (macos)"
     )]
     pub provider: String,
     #[arg(
