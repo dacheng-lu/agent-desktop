@@ -106,7 +106,7 @@ fn slow_pre_capture_preserves_dispatch_budget() {
             ref_id: "@e1",
             context: &context,
         },
-        ActionRequest::headless(Action::Click).with_timeout_ms(Some(500)),
+        ActionRequest::headless(Action::Click).with_timeout_ms(Some(ACTION_BUDGET_MS)),
         crate::ref_action::ref_action_single::dispatch_resolved,
     );
 

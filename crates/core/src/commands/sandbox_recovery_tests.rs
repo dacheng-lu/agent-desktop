@@ -144,6 +144,35 @@ fn removing_a_malformed_record_without_a_provider_returns_an_actionable_error() 
 }
 
 #[test]
+fn a_directory_without_a_record_is_broken_to_every_verb_not_absent() {
+    let home = HomeGuard::new();
+    let root = sandboxes_root(&home);
+    sandbox_store::create(&root, &record("dev-1", "stub", 1)).expect("record");
+    std::fs::remove_file(root.join("dev-1").join(sandbox_store::RECORD_FILE))
+        .expect("remove record");
+    let adapter = ScriptedAdapter::new();
+    let status = SandboxAction::Status {
+        name: "dev-1".to_string(),
+    };
+
+    for action in [rm_action(), status] {
+        let error = adapter_error(execute(action, &adapter).expect_err("no provider to use"));
+
+        assert_eq!(error.code, ErrorCode::InvalidArgs);
+        assert!(
+            error
+                .suggestion
+                .as_deref()
+                .is_some_and(|suggestion| suggestion.contains("--provider")),
+            "the suggestion names the recovery flag"
+        );
+        assert_eq!(error.disposition, DeliverySemantics::not_delivered());
+    }
+    assert!(adapter.requests().is_empty(), "no provider was guessed");
+    assert!(root.join("dev-1").exists(), "the sandbox data is untouched");
+}
+
+#[test]
 fn an_explicit_provider_recovers_a_malformed_record_through_the_provider() {
     let home = HomeGuard::new();
     let root = sandboxes_root(&home);
