@@ -49,9 +49,10 @@ pub(crate) fn run_with_deadline(
     })?;
     configure_process_group(command);
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command
-        .spawn()
-        .map_err(|error| AdapterError::internal(format!("{label}: {error}")))?;
+    let mut child = command.spawn().map_err(|error| {
+        AdapterError::internal(format!("{label}: {error}"))
+            .with_disposition(agent_desktop_core::DeliverySemantics::not_delivered())
+    })?;
     let process_group = i32::try_from(child.id()).map_err(|_| {
         let _ = child.kill();
         let _ = child.wait();

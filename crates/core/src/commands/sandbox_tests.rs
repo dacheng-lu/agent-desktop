@@ -108,6 +108,13 @@ fn a_create_the_provider_did_not_refuse_keeps_its_record_for_status_and_rm() {
         crate::AdapterError::timeout("the provider did not answer"),
     );
     let unreadable = ScriptedAdapter::new().reply("create", "the provider crashed", 1);
+    let flooded = ScriptedAdapter::new().fail(
+        "create",
+        crate::AdapterError::new(
+            crate::ErrorCode::ActionFailed,
+            "the provider printed too much",
+        ),
+    );
     let incomplete_success = ScriptedAdapter::new().reply("create", r#"{"ok":true}"#, 0);
     let changed_then_failed = ScriptedAdapter::new().reply(
         "create",
@@ -118,6 +125,7 @@ fn a_create_the_provider_did_not_refuse_keeps_its_record_for_status_and_rm() {
     for adapter in [
         timed_out,
         unreadable,
+        flooded,
         incomplete_success,
         changed_then_failed,
     ] {

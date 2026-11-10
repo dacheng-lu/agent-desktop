@@ -61,6 +61,7 @@ extern "C" fn forward(signal: i32) {
 fn stop_group(group: i32) {
     unsafe { libc::kill(-group, libc::SIGTERM) };
     for _ in 0..GRACE_POLLS {
+        unsafe { libc::waitpid(group, std::ptr::null_mut(), libc::WNOHANG) };
         if unsafe { libc::kill(-group, 0) } != 0 {
             return;
         }
