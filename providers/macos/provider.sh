@@ -447,7 +447,7 @@ download_image() {
   download_url=$1
   download_expected=$2
   download_partial=$3
-  image_size=$(curl -fsSIL "$download_url" 2>/dev/null | tr -d '\r' | \
+  image_size=$(curl -fsSIL --connect-timeout 30 --max-time 60 "$download_url" 2>/dev/null | tr -d '\r' | \
     awk 'tolower($1) == "content-length:" { size = $2 } END { if (size != "") print size }')
   case $image_size in
     ''|*[!0-9]*) image_size= ;;
@@ -465,10 +465,10 @@ download_image() {
       rm -f "$download_partial"
     fi
   fi
-  if ! curl -C - -fsSL -o "$download_partial" "$download_url"; then
+  if ! curl -C - -fsSL --connect-timeout 30 --speed-limit 1 --speed-time 120 -o "$download_partial" "$download_url"; then
     if ! verify_image_sha "$download_partial" "$download_expected"; then
       rm -f "$download_partial"
-      if ! curl -fsSL -o "$download_partial" "$download_url"; then
+      if ! curl -fsSL --connect-timeout 30 --speed-limit 1 --speed-time 120 -o "$download_partial" "$download_url"; then
         printf '%s\n' 'The latest Apple macOS image could not be downloaded.'
         return 1
       fi
@@ -496,7 +496,7 @@ do_install_job() {
     download_dir=$VM_DIR/download
     mkdir -p "$CACHE_DIR" "$download_dir"
     catalog=$download_dir/catalog.xml
-    if ! curl -fsSL -o "$catalog" 'https://mesu.apple.com/assets/macos/com_apple_macOSIPSW/com_apple_macOSIPSW.xml'; then
+    if ! curl -fsSL --connect-timeout 30 --speed-limit 1 --speed-time 120 -o "$catalog" 'https://mesu.apple.com/assets/macos/com_apple_macOSIPSW/com_apple_macOSIPSW.xml'; then
       printf '%s\n' 'The Apple macOS image catalog could not be downloaded.'
       return 1
     fi
@@ -765,7 +765,9 @@ installation_gate() {
     return 0
   fi
   if [ "$install_status" -eq 2 ] || ! vm_bundle_complete "$VM_DIR"; then
-    broken_state "Sandbox $1 has incomplete or failed VM installation files." "$1"
+    install_reason=
+    [ ! -s "$VM_DIR/install.log" ] || install_reason=" The reason is in $VM_DIR/install.log; read it before removing the sandbox."
+    broken_state "Sandbox $1 has incomplete or failed VM installation files.$install_reason" "$1"
     return 0
   fi
   return 1
@@ -864,8 +866,8 @@ do_stop() {
   fi
   attempts=0
   while kill -0 "$stop_pid" 2>/dev/null; do
-    if [ "$attempts" -ge 150 ]; then
-      emit_fail TIMEOUT "Sandbox $name did not stop within 30 seconds." "Run agent-desktop sandbox status $name."
+    if [ "$attempts" -ge 120 ]; then
+      emit_fail TIMEOUT "Sandbox $name did not stop within 24 seconds." "Run agent-desktop sandbox status $name."
       return 1
     fi
     sleep 0.2
