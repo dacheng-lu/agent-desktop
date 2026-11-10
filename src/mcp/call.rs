@@ -43,17 +43,28 @@ pub(crate) fn call(
     let Some(mut child) = calls.take(id) else {
         return error_result(CANCELLED);
     };
-    let status = child
-        .wait()
-        .map_or_else(|error| error.to_string(), |status| status.to_string());
+    let status = child.wait();
+    let succeeded = status.as_ref().is_ok_and(|status| status.success());
+    let status = status.map_or_else(|error| error.to_string(), |status| status.to_string());
     match serde_json::from_slice::<Value>(&stdout) {
         Ok(envelope) => envelope_result(envelope),
+        Err(_) if tool.path == ["sandbox", "exec"] && !stdout.is_empty() => {
+            guest_text_result(&stdout, succeeded)
+        }
         Err(_) => error_result(&format!(
             "agent-desktop {} exited with {status} and no JSON envelope: {}",
             tool.path.join(" "),
             String::from_utf8_lossy(&stderr).trim()
         )),
     }
+}
+
+/// A guest command that prints plain text, such as `--help`, is returned as that text with the guest's status.
+fn guest_text_result(stdout: &[u8], succeeded: bool) -> Value {
+    json!({
+        "content": [{ "type": "text", "text": String::from_utf8_lossy(stdout) }],
+        "isError": !succeeded,
+    })
 }
 
 /// Builds the child command that runs `tool`: server globals precede an ordinary tool, and belong to the

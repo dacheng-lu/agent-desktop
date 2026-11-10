@@ -231,3 +231,12 @@ fn removing_a_directory_the_provider_already_removed_succeeds() {
 
     super::remove(&root, "dev-1").expect("nothing is left to remove");
 }
+
+#[test]
+fn an_oversized_record_is_malformed_so_recovery_can_remove_it() {
+    let scratch = Scratch::new("oversized");
+    let root = scratch.root();
+    write_record(&root, "dev-1", &vec![b' '; 8192]);
+
+    assert_eq!(load(&root, "dev-1").unwrap_err().code(), "INVALID_ARGS");
+}

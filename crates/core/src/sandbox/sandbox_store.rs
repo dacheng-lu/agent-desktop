@@ -46,6 +46,7 @@ pub(crate) fn load(root: &Path, name: &str) -> Result<SandboxRecord, AppError> {
             .filter(|record: &SandboxRecord| record.name == name)
             .ok_or_else(|| invalid_record(name)),
         Err(error) if error.kind() == ErrorKind::NotFound => Err(not_found(name)),
+        Err(error) if error.kind() == ErrorKind::InvalidData => Err(invalid_record(name)),
         Err(error) => Err(error.into()),
     }
 }
