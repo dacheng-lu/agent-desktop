@@ -115,6 +115,28 @@ fn sandbox_exec_guest_globals_win_without_duplicating_server_flags() {
 }
 
 #[test]
+fn sandbox_exec_drops_a_server_global_that_conflicts_with_a_guest_global() {
+    let tool = tool_at(&["sandbox", "exec"]);
+    for (server, guest) in [
+        ("--wait-for-gone=AXButton:Save", "--wait-for=AXButton:Done"),
+        ("--wait-for=AXButton:Save", "--wait-for-gone=AXButton:Done"),
+    ] {
+        let args = child_args(
+            &tool,
+            json!({ "name": "dev", "args": [guest, "snapshot"] }),
+            &[server, "--session=server"],
+        );
+        let inner = guest_args(&args);
+
+        assert_eq!(inner, ["--session=server", guest, "snapshot"]);
+        Cli::try_parse_from(
+            std::iter::once("agent-desktop").chain(inner.iter().map(String::as_str)),
+        )
+        .expect("the guest parser accepts the forwarded arguments");
+    }
+}
+
+#[test]
 fn sandbox_exec_recognizes_a_guest_short_global() {
     let guest = ["-v", "snapshot", "--app", "Finder"];
     let parsed = Cli::try_parse_from(std::iter::once("agent-desktop").chain(guest))

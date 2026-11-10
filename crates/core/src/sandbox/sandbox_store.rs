@@ -41,7 +41,10 @@ fn entry_exists(path: &Path) -> Result<bool, AppError> {
 pub(crate) fn load(root: &Path, name: &str) -> Result<SandboxRecord, AppError> {
     validate_sandbox_name(name)?;
     match read_private_bounded(&root.join(name).join(RECORD_FILE), MAX_RECORD_BYTES) {
-        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|_| invalid_record(name)),
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .ok()
+            .filter(|record: &SandboxRecord| record.name == name)
+            .ok_or_else(|| invalid_record(name)),
         Err(error) if error.kind() == ErrorKind::NotFound => Err(not_found(name)),
         Err(error) => Err(error.into()),
     }
@@ -76,7 +79,7 @@ pub(crate) fn remove(root: &Path, name: &str) -> Result<(), AppError> {
     validate_sandbox_name(name)?;
     match std::fs::remove_dir_all(root.join(name)) {
         Ok(()) => Ok(()),
-        Err(error) if error.kind() == ErrorKind::NotFound => Err(not_found(name)),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error.into()),
     }
 }
