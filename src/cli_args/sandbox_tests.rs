@@ -35,9 +35,9 @@ fn sandbox_rm_accepts_an_optional_recovery_provider() {
     assert_eq!(plain.name, "dev-1");
     assert!(plain.provider.is_none());
 
-    let recovery = rm_action(&["dev-1", "--provider", "macos-vm"]);
+    let recovery = rm_action(&["dev-1", "--provider", "macos"]);
     assert_eq!(recovery.name, "dev-1");
-    assert_eq!(recovery.provider.as_deref(), Some("macos-vm"));
+    assert_eq!(recovery.provider.as_deref(), Some("macos"));
 }
 
 #[test]

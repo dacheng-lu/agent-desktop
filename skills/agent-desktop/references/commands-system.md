@@ -223,7 +223,7 @@ Multi-agent cursors (macOS and Windows): start with `session start --cursor --mu
 A sandbox whose record is malformed or missing appears in `sandbox list` with `state: "broken"` and no `provider`, because agent-desktop cannot read who owns it. Recover it with the provider that created it:
 
 ```bash
-agent-desktop sandbox rm dev-1 --provider macos-vm
+agent-desktop sandbox rm dev-1 --provider macos
 ```
 
 `--provider` is for that recovery only. A healthy record supplies its own provider, and a different value is refused. Removal still asks the provider first, so a running sandbox is refused and its data stays. Without `--provider`, the same broken record returns `INVALID_ARGS` with the recovery command in `suggestion`.
