@@ -299,6 +299,15 @@ run_ok install
 assert_field "$tmp/out" state unavailable 'install without Command Line Tools'
 FAKE_SWIFTC_FOUND=1
 
+locked_dir="$tmp/locked\\dir \"quoted\""
+mkdir -p "$locked_dir"
+chmod 0555 "$locked_dir"
+status=0
+run_provider_with AD_PROVIDER_DIR "$locked_dir" install > "$tmp/out" 2> "$tmp/err" || status=$?
+[ "$status" = 1 ] || fail "install into an unwritable directory exited $status: $(cat "$tmp/out" "$tmp/err")"
+assert_field "$tmp/out" suggestion "Make $locked_dir writable, then run agent-desktop install macos-vm." \
+  'a provider path holding a backslash and a quote'
+
 printf '#!/bin/sh\nexit 0\n' > "$AD_PROVIDER_DIR/build/vmhost"
 chmod 0755 "$AD_PROVIDER_DIR/build/vmhost"
 : > "$FAKE_LOG"

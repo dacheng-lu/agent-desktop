@@ -2,16 +2,20 @@
 set -eu
 
 json_str() {
-  printf '%s' "$1" | awk '
+  printf '%s' "$1" | LC_ALL=C awk '
     BEGIN { RS = "\001" }
     {
-      gsub(/\\/, "\\\\")
-      gsub(/"/, "\\\"")
-      gsub(/\t/, "\\t")
-      gsub(/\r/, "\\r")
-      gsub(/\n/, "\\n")
-      gsub(/[[:cntrl:]]/, "")
-      printf "%s", $0
+      out = ""
+      n = length($0)
+      for (i = 1; i <= n; i++) {
+        c = substr($0, i, 1)
+        if (c == "\\" || c == "\"") out = out "\\" c
+        else if (c == "\t") out = out "\\t"
+        else if (c == "\r") out = out "\\r"
+        else if (c == "\n") out = out "\\n"
+        else if (c !~ /[[:cntrl:]]/) out = out c
+      }
+      printf "%s", out
     }
   '
 }
