@@ -66,7 +66,7 @@ A broken entry whose record is malformed or missing omits `provider` and puts th
 
 A record that names a provider this build does not know keeps `provider` in its broken entry and recovers the same way: `next` and the `INVALID_ARGS` suggestion name `--provider`, and a known provider passed there removes the sandbox.
 
-`sandbox exec` passes the guest command's stdout and exit status through unchanged instead of adding an envelope. A provider failure returns a host error envelope instead.
+`sandbox exec` passes the guest command's stdout and exit status through unchanged instead of adding an envelope; the guest's stderr is not passed through and the guest receives no stdin, so a guest command that reads `--stdin` gets empty input. A provider failure returns a host error envelope instead. agent-desktop reads at most 8 MiB from each of the guest's output streams; a command that prints more fails with `ACTION_FAILED`, so write large output to a file in the guest.
 
 ## Disposition values
 

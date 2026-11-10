@@ -207,3 +207,36 @@ fn names_that_escape_the_root_are_refused() {
     let error = load(&scratch.root(), "../outside").unwrap_err();
     assert_eq!(error.code(), "INVALID_ARGS");
 }
+
+#[test]
+fn a_record_that_names_another_sandbox_is_refused_as_malformed() {
+    let scratch = Scratch::new("renamed");
+    let root = scratch.root();
+    create(&root, &record("victim", "macos", 1)).unwrap();
+    let foreign = serde_json::to_vec(&record("victim", "macos", 2)).unwrap();
+    write_record(&root, "dev-1", &foreign);
+
+    assert_eq!(load(&root, "dev-1").unwrap_err().code(), "INVALID_ARGS");
+    let listed = list(&root).unwrap();
+    let entry = listed.iter().find(|entry| entry.name == "dev-1").unwrap();
+    assert!(entry.record.is_err(), "list never reports the other name");
+}
+
+#[test]
+fn removing_a_directory_the_provider_already_removed_succeeds() {
+    let scratch = Scratch::new("removed");
+    let root = scratch.root();
+    create(&root, &record("dev-1", "macos", 1)).unwrap();
+    std::fs::remove_dir_all(root.join("dev-1")).unwrap();
+
+    super::remove(&root, "dev-1").expect("nothing is left to remove");
+}
+
+#[test]
+fn an_oversized_record_is_malformed_so_recovery_can_remove_it() {
+    let scratch = Scratch::new("oversized");
+    let root = scratch.root();
+    write_record(&root, "dev-1", &vec![b' '; 8192]);
+
+    assert_eq!(load(&root, "dev-1").unwrap_err().code(), "INVALID_ARGS");
+}

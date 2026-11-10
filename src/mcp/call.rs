@@ -43,11 +43,14 @@ pub(crate) fn call(
     let Some(mut child) = calls.take(id) else {
         return error_result(CANCELLED);
     };
-    let status = child
-        .wait()
-        .map_or_else(|error| error.to_string(), |status| status.to_string());
+    let status = child.wait();
+    let succeeded = status.as_ref().is_ok_and(|status| status.success());
+    let status = status.map_or_else(|error| error.to_string(), |status| status.to_string());
     match serde_json::from_slice::<Value>(&stdout) {
         Ok(envelope) => envelope_result(envelope),
+        Err(_) if tool.path == ["sandbox", "exec"] && !stdout.is_empty() => {
+            guest_text_result(&stdout, succeeded)
+        }
         Err(_) => error_result(&format!(
             "agent-desktop {} exited with {status} and no JSON envelope: {}",
             tool.path.join(" "),
@@ -56,9 +59,18 @@ pub(crate) fn call(
     }
 }
 
+/// A guest command that prints plain text, such as `--help`, is returned as that text with the guest's status.
+fn guest_text_result(stdout: &[u8], succeeded: bool) -> Value {
+    json!({
+        "content": [{ "type": "text", "text": String::from_utf8_lossy(stdout) }],
+        "isError": !succeeded,
+    })
+}
+
 /// Builds the child command that runs `tool`: server globals precede an ordinary tool, and belong to the
-/// guest command after `sandbox exec NAME --`. A global the guest sets itself wins over the server's value,
-/// and the guest's own parser remains the authority on whether its full argument list is valid.
+/// guest command after `sandbox exec NAME --`. A global the guest sets itself wins over the server's value
+/// and over any server global that conflicts with it, and the guest's own parser remains the authority on
+/// whether its full argument list is valid.
 fn child_command(exe: &Path, tool: &Tool, argv: Vec<String>, globals: &[String]) -> Command {
     let mut command = Command::new(exe);
     command
@@ -83,12 +95,12 @@ fn command_args(tool: &Tool, argv: Vec<String>, globals: &[String]) -> Vec<Strin
     if guest.is_empty() {
         return argv;
     }
-    let explicit = explicit_guest_globals(guest);
+    let overridden = overridden_globals(guest);
     let mut args = argv[..=delimiter].to_vec();
     args.extend(
         globals
             .iter()
-            .filter(|global| !explicit.contains(flag_name(global)))
+            .filter(|global| !overridden.contains(flag_name(global)))
             .cloned(),
     );
     args.extend(guest.iter().cloned());
@@ -100,9 +112,10 @@ fn flag_name(global: &str) -> &str {
     flag.split('=').next().unwrap_or(flag)
 }
 
-/// The globals the guest command sets itself. Argument errors are ignored for metadata only, and a parse
-/// that cannot supply matches yields an empty set so the caller keeps every inherited global.
-fn explicit_guest_globals(guest: &[String]) -> BTreeSet<String> {
+/// The globals the guest command sets itself, plus every global that conflicts with one of them. Argument
+/// errors are ignored for metadata only, and a parse that cannot supply matches yields an empty set so the
+/// caller keeps every inherited global.
+fn overridden_globals(guest: &[String]) -> BTreeSet<String> {
     let mut command = Cli::command()
         .subcommand(super::command())
         .ignore_errors(true);
@@ -112,10 +125,27 @@ fn explicit_guest_globals(guest: &[String]) -> BTreeSet<String> {
     let Ok(matches) = command.try_get_matches_from_mut(argv) else {
         return BTreeSet::new();
     };
-    command
+    let globals = command
         .get_arguments()
         .filter(|arg| arg.is_global_set())
+        .collect::<Vec<_>>();
+    let conflicts = |one: &clap::Arg, other: &clap::Arg| {
+        command
+            .get_arg_conflicts_with(one)
+            .iter()
+            .any(|conflict| conflict.get_id() == other.get_id())
+    };
+    let explicit = globals
+        .iter()
         .filter(|arg| matches.value_source(arg.get_id().as_str()) == Some(ValueSource::CommandLine))
+        .collect::<Vec<_>>();
+    globals
+        .iter()
+        .filter(|arg| {
+            explicit.iter().any(|set| {
+                set.get_id() == arg.get_id() || conflicts(set, arg) || conflicts(arg, set)
+            })
+        })
         .filter_map(|arg| arg.get_long().map(ToString::to_string))
         .collect()
 }
