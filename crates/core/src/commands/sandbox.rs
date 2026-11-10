@@ -30,6 +30,7 @@ const EXEC_TIMEOUT: Duration = Duration::from_secs(300);
 pub fn execute(action: SandboxAction, adapter: &dyn PlatformAdapter) -> Result<Value, AppError> {
     let root = resolve_configured_state_root()?;
     match action {
+        SandboxAction::Install { provider } => super::sandbox_install::execute(provider, adapter),
         SandboxAction::Create {
             name,
             provider,
@@ -160,7 +161,10 @@ fn recovery_target(
     let (provider_dir, sandboxes_root) = resolve(root, spec)?;
     match sandbox_store::load(&sandboxes_root, name) {
         Ok(record) if record.provider == provider => {}
-        Ok(record) => return Err(provider_mismatch(name, &record.provider, provider)),
+        Ok(record) if find_provider(&record.provider).is_ok() => {
+            return Err(provider_mismatch(name, &record.provider, provider));
+        }
+        Ok(_) => require_sandbox_dir(&sandboxes_root, name)?,
         Err(error) if recoverable_record(&error) => require_sandbox_dir(&sandboxes_root, name)?,
         Err(error) => return Err(error),
     }
@@ -221,7 +225,7 @@ fn status_reply(
     record: &SandboxRecord,
     adapter: &dyn PlatformAdapter,
 ) -> Result<ProviderReply, AppError> {
-    let spec = find_provider(&record.provider)?;
+    let spec = recorded_provider(record)?;
     let (provider_dir, sandboxes_root) = resolve(root, spec)?;
     let call = ProviderCall::new(
         spec,
@@ -236,9 +240,31 @@ fn status_reply(
 
 fn locate(root: &Path, name: &str) -> Result<(&'static ProviderSpec, PathBuf, PathBuf), AppError> {
     let record = sandbox_store::load(&root.join(SANDBOXES_DIR), name)?;
-    let spec = find_provider(&record.provider)?;
+    let spec = recorded_provider(&record)?;
     let (provider_dir, sandboxes_root) = resolve(root, spec)?;
     Ok((spec, provider_dir, sandboxes_root))
+}
+
+fn recorded_provider(record: &SandboxRecord) -> Result<&'static ProviderSpec, AppError> {
+    find_provider(&record.provider).map_err(|_| {
+        AppError::Adapter(
+            AdapterError::new(
+                ErrorCode::InvalidArgs,
+                format!(
+                    "Sandbox {} records provider {}, which this build does not know.",
+                    record.name, record.provider
+                ),
+            )
+            .with_suggestion(unknown_provider_next(&record.name))
+            .with_disposition(DeliverySemantics::not_delivered()),
+        )
+    })
+}
+
+fn unknown_provider_next(name: &str) -> String {
+    format!(
+        "Remove it with the agent-desktop build that created it. If the record is wrong, run `agent-desktop sandbox rm {name} --provider <provider>` with the provider that created it."
+    )
 }
 
 fn verb_args(name: &str, verb: &str) -> Vec<String> {
@@ -268,14 +294,19 @@ fn running_refusal(name: &str) -> AppError {
 }
 
 fn broken_entry(record: &SandboxRecord, error: &AppError) -> Value {
+    let next = if find_provider(&record.provider).is_ok() {
+        format!(
+            "Run `agent-desktop sandbox rm {}` to remove it.",
+            record.name
+        )
+    } else {
+        unknown_provider_next(&record.name)
+    };
     broken_value(
         &record.name,
         Some(&record.provider),
         error.to_string(),
-        format!(
-            "Run `agent-desktop sandbox rm {}` to remove it.",
-            record.name
-        ),
+        next,
     )
 }
 
@@ -318,7 +349,7 @@ fn recovery_next(name: &str) -> String {
 fn unavailable_refusal(message: String) -> AppError {
     AppError::Adapter(
         AdapterError::new(ErrorCode::PlatformNotSupported, message)
-            .with_suggestion("Run `agent-desktop install` to see what each provider needs.")
+            .with_suggestion("Run `agent-desktop sandbox install` to see what each provider needs.")
             .with_disposition(DeliverySemantics::not_delivered()),
     )
 }

@@ -22,7 +22,6 @@ pub mod get;
 pub mod helpers;
 pub mod hover;
 mod input_hold_policy;
-pub mod install;
 pub mod is_check;
 pub mod key_down;
 pub mod key_up;
@@ -57,6 +56,7 @@ pub mod restore;
 pub mod right_click;
 pub mod sandbox;
 pub mod sandbox_action;
+pub mod sandbox_install;
 pub mod screenshot;
 #[cfg(test)]
 mod screenshot_tests;

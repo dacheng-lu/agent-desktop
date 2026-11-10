@@ -60,9 +60,11 @@ The removed `retry_command` field has no compatibility alias.
 
 ## Sandbox results
 
-`install` returns `data: {"providers": [...]}` and `sandbox list` returns `data: {"sandboxes": [...]}`. An entry has `name`, `state`, and `message`, with `next` when a further action is available; a sandbox entry, and the `data` of a single sandbox command, also carry `provider`. Provider-specific fields may appear beside these. `install <provider>` returns that entry as `data`. States are `unavailable`, `missing`, `ready`, `working`, `needs_setup`, `running`, `stopped`, and `broken`.
+`sandbox install` returns `data: {"providers": [...]}` and `sandbox list` returns `data: {"sandboxes": [...]}`. An entry has `name`, `state`, and `message`, with `next` when a further action is available; a sandbox entry, and the `data` of a single sandbox command, also carry `provider`. Provider-specific fields may appear beside these. `sandbox install <provider>` returns that entry as `data`. States are `unavailable`, `missing`, `ready`, `working`, `needs_setup`, `running`, `stopped`, and `broken`.
 
 A broken entry whose record is malformed or missing omits `provider` and puts the recovery command in `next`. Use `sandbox rm <name> --provider <provider>` with the provider that created the sandbox. A healthy record supplies its own provider, and a different value is refused. Without `--provider`, the same condition returns `INVALID_ARGS` with that recovery command in `suggestion`.
+
+A record that names a provider this build does not know keeps `provider` in its broken entry and recovers the same way: `next` and the `INVALID_ARGS` suggestion name `--provider`, and a known provider passed there removes the sandbox.
 
 `sandbox exec` passes the guest command's stdout and exit status through unchanged instead of adding an envelope. A provider failure returns a host error envelope instead.
 

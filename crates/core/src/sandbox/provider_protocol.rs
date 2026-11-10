@@ -132,7 +132,7 @@ pub(crate) fn next_step(provider: &str, name: Option<&str>) -> String {
         Some(name) => {
             format!("Run `agent-desktop sandbox status {name}` to see its current state.")
         }
-        None => format!("Run `agent-desktop install {provider}` to see its current state."),
+        None => format!("Run `agent-desktop sandbox install {provider}` to see its current state."),
     }
 }
 

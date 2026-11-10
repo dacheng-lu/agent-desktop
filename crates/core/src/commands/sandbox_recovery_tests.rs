@@ -253,6 +253,46 @@ fn recovery_keeps_the_data_when_the_provider_rm_fails() {
     assert!(root.join("dev-1").join(sandbox_store::RECORD_FILE).exists());
 }
 
+#[test]
+fn a_record_naming_an_unknown_provider_lists_a_recovery_that_removes_it() {
+    let home = HomeGuard::new();
+    let root = sandboxes_root(&home);
+    sandbox_store::create(&root, &record("dev-1", "nomad", 1)).expect("record");
+    let adapter = ScriptedAdapter::new()
+        .reply("status", STOPPED, 0)
+        .reply("rm", REMOVED, 0);
+
+    let listed = execute(SandboxAction::List, &adapter).expect("list");
+    let broken = &listed["sandboxes"][0];
+    assert_eq!(broken["state"], "broken");
+    assert_eq!(broken["provider"], "nomad");
+    assert!(
+        broken["next"]
+            .as_str()
+            .is_some_and(|next| next.contains("--provider")),
+        "the entry names the recovery flag"
+    );
+
+    let error = adapter_error(execute(rm_action(), &adapter).expect_err("unknown provider"));
+    assert_eq!(error.code, ErrorCode::InvalidArgs);
+    assert!(
+        error
+            .suggestion
+            .as_deref()
+            .is_some_and(|suggestion| suggestion.contains("--provider")),
+        "the suggestion names the recovery flag"
+    );
+    assert!(adapter.requests().is_empty(), "no provider was guessed");
+    assert!(root.join("dev-1").exists());
+
+    execute(rm_recovery_action("stub"), &adapter).expect("recovery");
+    assert_eq!(
+        verbs(&adapter),
+        vec!["status".to_string(), "rm".to_string()]
+    );
+    assert!(!root.join("dev-1").exists());
+}
+
 struct DeniedRecordRead(PathBuf);
 
 impl crate::PrivateFileOps for DeniedRecordRead {

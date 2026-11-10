@@ -109,9 +109,9 @@ pub(crate) fn parse_command(item: BatchCommand) -> Result<Commands, AppError> {
             "Enable or disable it once for the selected session before running the batch.",
         )),
         "trace" => parse_trace(item.args).map(Commands::Trace),
-        "install" | "sandbox" => Err(AppError::invalid_input_with_suggestion(
-            "Run sandbox and install commands on their own, not inside batch.",
-            "Run 'agent-desktop sandbox' or 'agent-desktop install' as its own call.",
+        "sandbox" => Err(AppError::invalid_input_with_suggestion(
+            "Run sandbox commands on their own, not inside batch.",
+            "Run 'agent-desktop sandbox' as its own call.",
         )),
         "batch" => Err(AppError::invalid_input_with_suggestion(
             "Batch commands cannot be nested",

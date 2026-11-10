@@ -45,13 +45,13 @@ fn write_record(root: &Path, name: &str, bytes: &[u8]) {
 fn duplicate_create_fails_and_keeps_the_first_record() {
     let scratch = Scratch::new("duplicate");
     let root = scratch.root();
-    create(&root, &record("dev-1", "macos-vm", 1)).unwrap();
+    create(&root, &record("dev-1", "macos", 1)).unwrap();
 
-    let error = create(&root, &record("dev-1", "macos-vm", 2)).unwrap_err();
+    let error = create(&root, &record("dev-1", "macos", 2)).unwrap_err();
 
     assert_eq!(error.code(), "INVALID_ARGS");
     let kept = load(&root, "dev-1").unwrap();
-    assert_eq!(kept.provider, "macos-vm");
+    assert_eq!(kept.provider, "macos");
     assert_eq!(kept.created_at, 1);
 }
 
@@ -67,7 +67,7 @@ fn concurrent_creates_of_one_name_admit_exactly_one_and_refuse_the_rest_as_dupli
         let barrier = Arc::clone(&barrier);
         handles.push(std::thread::spawn(move || {
             barrier.wait();
-            create(&root, &record("race", "macos-vm", index as u64))
+            create(&root, &record("race", "macos", index as u64))
                 .map(|_| ())
                 .map_err(|error| error.code().to_string())
         }));
@@ -93,7 +93,7 @@ fn concurrent_creates_of_one_name_admit_exactly_one_and_refuse_the_rest_as_dupli
 fn a_published_record_has_one_link_and_no_staging_left_over() {
     let scratch = Scratch::new("published");
     let root = scratch.root();
-    create(&root, &record("dev-1", "macos-vm", 1)).unwrap();
+    create(&root, &record("dev-1", "macos", 1)).unwrap();
 
     let dir = root.join("dev-1");
     let entries: Vec<OsString> = std::fs::read_dir(&dir)
@@ -108,7 +108,7 @@ fn a_published_record_has_one_link_and_no_staging_left_over() {
 fn malformed_record_is_kept_beside_a_healthy_one_and_non_sandboxes_are_skipped() {
     let scratch = Scratch::new("list-malformed");
     let root = scratch.root();
-    create(&root, &record("healthy", "macos-vm", 1)).expect("healthy record");
+    create(&root, &record("healthy", "macos", 1)).expect("healthy record");
     write_record(&root, "broken", b"{not json");
     std::fs::create_dir_all(root.join("Not-A-Sandbox")).expect("invalid name directory");
 
@@ -130,7 +130,7 @@ fn malformed_record_is_kept_beside_a_healthy_one_and_non_sandboxes_are_skipped()
     );
     assert_eq!(
         entries[1].record.as_ref().expect("healthy record").provider,
-        "macos-vm"
+        "macos"
     );
 }
 
@@ -171,7 +171,7 @@ fn subprocess_crash_before_record_publish() {
         return;
     };
     let root = PathBuf::from(root);
-    let _ = create(&root, &record("crash", "macos-vm", 1));
+    let _ = create(&root, &record("crash", "macos", 1));
     panic!("crash failpoint did not abort");
 }
 
@@ -196,7 +196,7 @@ fn a_crash_before_publish_leaves_no_record_and_the_next_create_publishes() {
         "SANDBOX_NOT_FOUND"
     );
 
-    create(&root, &record("crash", "macos-vm", 1)).expect("a crashed publish is retryable");
+    create(&root, &record("crash", "macos", 1)).expect("a crashed publish is retryable");
 
     assert_eq!(load(&root, "crash").unwrap().created_at, 1);
 }

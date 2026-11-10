@@ -1,5 +1,8 @@
 #[derive(Debug, Clone)]
 pub enum SandboxAction {
+    Install {
+        provider: Option<String>,
+    },
     Create {
         name: String,
         provider: String,

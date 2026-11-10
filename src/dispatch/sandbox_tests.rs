@@ -41,7 +41,7 @@ fn sandbox_rm_forwards_the_recovery_provider_to_core() {
         "rm",
         "dev-1",
         "--provider",
-        "macos-vm",
+        "macos",
     ])
     .unwrap();
     let Some(crate::cli::Commands::Sandbox(args)) = cli.command else {
@@ -53,5 +53,5 @@ fn sandbox_rm_forwards_the_recovery_provider_to_core() {
     };
 
     assert_eq!(name, "dev-1");
-    assert_eq!(provider.as_deref(), Some("macos-vm"));
+    assert_eq!(provider.as_deref(), Some("macos"));
 }

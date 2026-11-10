@@ -35,9 +35,9 @@ fn sandbox_rm_accepts_an_optional_recovery_provider() {
     assert_eq!(plain.name, "dev-1");
     assert!(plain.provider.is_none());
 
-    let recovery = rm_action(&["dev-1", "--provider", "macos-vm"]);
+    let recovery = rm_action(&["dev-1", "--provider", "macos"]);
     assert_eq!(recovery.name, "dev-1");
-    assert_eq!(recovery.provider.as_deref(), Some("macos-vm"));
+    assert_eq!(recovery.provider.as_deref(), Some("macos"));
 }
 
 #[test]
@@ -54,4 +54,31 @@ fn sandbox_exec_hands_every_argument_after_the_separator_to_the_guest() {
 
     assert_eq!(exec.name, "dev");
     assert_eq!(exec.args, ["snapshot", "--app", "Finder", "--verbose"]);
+}
+
+#[test]
+fn sandbox_install_takes_an_optional_provider_and_no_settings() {
+    let cli = Cli::try_parse_from(["agent-desktop", "sandbox", "install", "macos"])
+        .expect("sandbox install parses");
+    assert!(matches!(
+        cli.command,
+        Some(Commands::Sandbox(super::SandboxArgs {
+            action: SandboxActionCli::Install(ref args),
+        })) if args.provider.as_deref() == Some("macos")
+    ));
+
+    let error = Cli::try_parse_from([
+        "agent-desktop",
+        "sandbox",
+        "install",
+        "macos",
+        "--set",
+        "binary=/tmp/agent-desktop",
+    ])
+    .expect_err("install takes no provider settings");
+    assert_eq!(error.exit_code(), 2);
+
+    let error = Cli::try_parse_from(["agent-desktop", "install"])
+        .expect_err("install is not a top-level command");
+    assert_eq!(error.exit_code(), 2);
 }

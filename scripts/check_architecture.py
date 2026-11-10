@@ -612,8 +612,8 @@ PLANTS = {
             ("crates/core/src/tree/mod.rs", "pub mod node;\n#[path = \"@ABS@/crates/core/src/input/mod.rs\"]\nmod misplaced;\n")],
 }
 PLANTS["G12"] = [
-    ("providers/macos-vm/provider.sh", "#!/bin/sh\nsocat TCP-LISTEN:9000,fork EXEC:sh\n"),
-    ("providers/macos-vm/vmhost.swift", "import Network\nlet l = try NWListener(using: .tcp)\n"),
+    ("providers/macos/provider.sh", "#!/bin/sh\nsocat TCP-LISTEN:9000,fork EXEC:sh\n"),
+    ("providers/macos/vmhost.swift", "import Network\nlet l = try NWListener(using: .tcp)\n"),
     ("crates/macos/src/system/host.rs", "fn f() { let _ = std::os::unix::net::UnixListener::bind(\"/tmp/h.sock\"); }\n"),
     ("crates/core/src/system/host.rs", "fn f() { let _ = std::net::TcpListener::bind((\"127.0.0.1\", 0)); }\n"),
     ("crates/windows/src/system/host.rs", "fn f() { let _ = CreateNamedPipeW; }\n"),

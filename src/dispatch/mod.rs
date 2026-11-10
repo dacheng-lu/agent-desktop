@@ -135,7 +135,6 @@ fn dispatch_command(
         Commands::Session(args) => session::dispatch(args, adapter, context),
         Commands::CursorOverlay(args) => cursor_overlay::dispatch(args, adapter, context),
         Commands::Trace(args) => trace::dispatch(args, context),
-        Commands::Install(args) => commands::install::execute(args.provider, adapter),
         Commands::Sandbox(args) => sandbox::dispatch(args, adapter),
     };
     if let Some(session_id) = overlay_session {
