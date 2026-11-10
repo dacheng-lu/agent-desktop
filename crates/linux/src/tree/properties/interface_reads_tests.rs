@@ -1,6 +1,55 @@
 use super::{ACTION_INTERFACE, skipped_without};
 use crate::tree::Field;
+use crate::tree::properties::liveness::Liveness;
 use crate::tree::properties::node_read::COMPONENT_INTERFACE;
+
+#[test]
+fn a_hung_get_actions_is_a_failed_field_not_a_walk_timeout() {
+    use std::time::{Duration, Instant};
+
+    use zbus::connection::Builder;
+
+    struct SlowAction;
+
+    #[zbus::interface(name = "org.a11y.atspi.Action")]
+    impl SlowAction {
+        async fn get_actions(&self) -> Vec<(String, String, String)> {
+            async_io::Timer::after(Duration::from_secs(5)).await;
+            Vec::new()
+        }
+    }
+
+    let (near, far) = std::os::unix::net::UnixStream::pair().unwrap();
+    let (client, server) = zbus::block_on(futures_lite::future::zip(
+        Builder::async_io_unix_stream(near).p2p().build(),
+        Builder::async_io_unix_stream(far)
+            .server(zbus::Guid::generate())
+            .unwrap()
+            .p2p()
+            .serve_at("/node", SlowAction)
+            .unwrap()
+            .build(),
+    ));
+    let _server = server.unwrap();
+    let element = crate::tree::AtspiElement::new(":1.1", "/node", 1);
+    let interfaces = Field::Present(vec![ACTION_INTERFACE.to_owned()]);
+    let started = Instant::now();
+    let actions = zbus::block_on(super::read_actions(
+        &client.unwrap(),
+        &element,
+        &interfaces,
+        Liveness::Alive,
+    ))
+    .expect("a slow action list keeps the node readable");
+    assert!(matches!(
+        actions,
+        Field::Failed(ref detail) if detail == "GetActions did not answer in time"
+    ));
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "the action read outlived its slice"
+    );
+}
 
 #[test]
 fn action_name_transport_loss_cannot_use_the_listed_fallback() {

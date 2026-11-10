@@ -1,4 +1,8 @@
+use std::time::Duration;
+
 use agent_desktop_core::AdapterError;
+use async_io::Timer;
+use futures_lite::future::or;
 use zbus::Connection;
 
 use super::liveness::Liveness;
@@ -8,6 +12,7 @@ use crate::tree::{AtspiElement, Extents, Field};
 
 const ACTION_INTERFACE: &str = "org.a11y.atspi.Action";
 const ACTION_NAMES_IN_FLIGHT: usize = 4;
+const ACTION_SLICE: Duration = Duration::from_millis(300);
 const SCREEN_COORDINATES: u32 = 0;
 
 /// `None` when the interface is advertised and its reads should go ahead.
@@ -72,7 +77,10 @@ async fn action_name(
 /// `GetName(i)` is the only call that returns the machine name on every
 /// toolkit: `GetActions` returns empty names on Chromium and junk on Gecko.
 /// `GetActions` supplies the count and the fallback for an index whose
-/// `GetName` method is refused. Connection loss ends the read.
+/// `GetName` method is refused. A call that does not answer in its slice is a
+/// failed field, not a failed node: some web-content processes leave the
+/// action list unanswered while their children remain readable. Connection
+/// loss still ends the read.
 pub(in crate::tree) async fn read_actions(
     connection: &Connection,
     element: &AtspiElement,
@@ -82,7 +90,19 @@ pub(in crate::tree) async fn read_actions(
     if let Some(skipped) = skipped_without(interfaces, ACTION_INTERFACE) {
         return Ok(skipped);
     }
-    let reply = call(connection, element, ACTION_INTERFACE, "GetActions", &()).await;
+    let reply = or(
+        async { Some(call(connection, element, ACTION_INTERFACE, "GetActions", &()).await) },
+        async {
+            Timer::after(ACTION_SLICE).await;
+            None
+        },
+    )
+    .await;
+    let Some(reply) = reply else {
+        return Ok(Field::Failed(
+            "GetActions did not answer in time".to_owned(),
+        ));
+    };
     let listed = field(
         deserialize::<Vec<(String, String, String)>>(reply),
         liveness,
