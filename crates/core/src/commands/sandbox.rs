@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::sandbox_action::SandboxAction;
 use crate::sandbox::exec_passthrough::ExecPassthrough;
 use crate::sandbox::provider_dirs::{SANDBOXES_DIR, resolve};
-use crate::sandbox::provider_protocol::{exec_outcome, parse_reply, provider_answered};
+use crate::sandbox::provider_protocol::{exec_outcome, parse_reply, provider_refused};
 use crate::sandbox::provider_reply::ProviderReply;
 use crate::sandbox::provider_run::{ProviderCall, success_value};
 use crate::sandbox::provider_settings::parse_settings;
@@ -88,24 +88,25 @@ fn create(
                 discard_untouched_record(&sandboxes_root, name);
             }
         })?;
-    let answered = provider_answered(&output);
+    let refused = provider_refused(&output);
     parse_reply(spec.name, Some(name), true, &output)
         .and_then(|reply| {
             if reply.state == SandboxState::Unavailable {
+                discard_untouched_record(&sandboxes_root, name);
                 Err(unavailable_refusal(reply.message))
             } else {
                 Ok(success_value(name, Some(spec.name), reply))
             }
         })
         .inspect_err(|_| {
-            if answered {
+            if refused {
                 discard_untouched_record(&sandboxes_root, name);
             }
         })
 }
 
-/// Drops the record of a create the provider refused. A create that timed out or ended without a readable
-/// reply keeps its record, because the provider may have made something that only `rm` can clear.
+/// Drops the record of a create the provider refused. Every other failed create keeps its record, because
+/// the provider may have made something that only `rm` can clear.
 fn discard_untouched_record(sandboxes_root: &Path, name: &str) {
     let dir = sandboxes_root.join(name);
     let Ok(entries) = std::fs::read_dir(&dir) else {

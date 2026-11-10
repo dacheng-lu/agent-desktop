@@ -102,14 +102,25 @@ fn a_failed_create_leaves_no_record_unless_the_provider_left_files() {
 }
 
 #[test]
-fn a_create_with_no_provider_answer_keeps_its_record_for_status_and_rm() {
+fn a_create_the_provider_did_not_refuse_keeps_its_record_for_status_and_rm() {
     let timed_out = ScriptedAdapter::new().fail(
         "create",
         crate::AdapterError::timeout("the provider did not answer"),
     );
     let unreadable = ScriptedAdapter::new().reply("create", "the provider crashed", 1);
+    let incomplete_success = ScriptedAdapter::new().reply("create", r#"{"ok":true}"#, 0);
+    let changed_then_failed = ScriptedAdapter::new().reply(
+        "create",
+        r#"{"ok":false,"code":"ACTION_FAILED","message":"The disk filled up.","suggestion":"Free space.","data":{"changed":true}}"#,
+        1,
+    );
 
-    for adapter in [timed_out, unreadable] {
+    for adapter in [
+        timed_out,
+        unreadable,
+        incomplete_success,
+        changed_then_failed,
+    ] {
         let home = HomeGuard::new();
 
         execute(create_action(), &adapter).expect_err("the create outcome is unknown");

@@ -136,9 +136,13 @@ pub(crate) fn next_step(provider: &str, name: Option<&str>) -> String {
     }
 }
 
-/// Whether the provider finished with a reply that says if the verb succeeded.
-pub(crate) fn provider_answered(output: &ProviderScriptOutput) -> bool {
-    reply_value(&output.stdout).is_some_and(|value| value.get("ok").is_some_and(Value::is_boolean))
+/// Whether the provider finished with a complete failure reply that does not say it changed anything.
+pub(crate) fn provider_refused(output: &ProviderScriptOutput) -> bool {
+    reply_value(&output.stdout).is_some_and(|value| {
+        value.get("ok").and_then(Value::as_bool) == Some(false)
+            && failure_fields(&value).is_some()
+            && value.pointer("/data/changed").and_then(Value::as_bool) != Some(true)
+    })
 }
 
 fn reply_value(stdout: &[u8]) -> Option<Value> {

@@ -1,4 +1,5 @@
-//! Forwards a terminating signal to the subprocess group in flight, so a cancelled command leaves no orphan.
+//! Stops the subprocess group in flight when a terminating signal arrives, so a cancelled command leaves no
+//! orphan: the group gets SIGTERM, a short grace, then SIGKILL, and only then does this process end.
 
 use std::sync::Once;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -6,6 +7,11 @@ use std::sync::atomic::{AtomicI32, Ordering};
 static ACTIVE_GROUP: AtomicI32 = AtomicI32::new(0);
 static INSTALL: Once = Once::new();
 const FORWARDED: [i32; 3] = [libc::SIGHUP, libc::SIGINT, libc::SIGTERM];
+const GRACE_POLLS: u32 = 40;
+const GRACE_POLL: libc::timespec = libc::timespec {
+    tv_sec: 0,
+    tv_nsec: 50_000_000,
+};
 
 /// Makes SIGHUP, SIGINT and SIGTERM stop the tracked subprocess group before they end this process. Only
 /// the CLI's sandbox path calls it, so a host application that loads the library keeps its own handlers.
@@ -43,12 +49,24 @@ fn install() {
 extern "C" fn forward(signal: i32) {
     let group = ACTIVE_GROUP.load(Ordering::SeqCst);
     if group > 0 {
-        unsafe { libc::kill(-group, libc::SIGTERM) };
+        stop_group(group);
     }
     unsafe {
         libc::signal(signal, libc::SIG_DFL);
         libc::raise(signal);
     }
+}
+
+/// Uses only async-signal-safe calls, because it runs inside the signal handler.
+fn stop_group(group: i32) {
+    unsafe { libc::kill(-group, libc::SIGTERM) };
+    for _ in 0..GRACE_POLLS {
+        if unsafe { libc::kill(-group, 0) } != 0 {
+            return;
+        }
+        unsafe { libc::nanosleep(&GRACE_POLL, std::ptr::null_mut()) };
+    }
+    unsafe { libc::kill(-group, libc::SIGKILL) };
 }
 
 #[cfg(test)]

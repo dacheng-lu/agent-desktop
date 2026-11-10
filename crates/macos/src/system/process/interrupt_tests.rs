@@ -3,6 +3,9 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const PID_FILE_ENV: &str = "AD_INTERRUPT_TEST_PID_FILE";
+const SCRIPT_ENV: &str = "AD_INTERRUPT_TEST_SCRIPT";
+const OBEYS_TERM: &str = "echo $$ > \"$0\"; sleep 30; :";
+const IGNORES_TERM: &str = "trap '' TERM; echo $$ > \"$0\"; sleep 30; :";
 
 fn helper_name() -> String {
     let module = module_path!();
@@ -20,21 +23,31 @@ fn helper_runs_a_slow_subprocess() {
     let Some(pid_file) = std::env::var_os(PID_FILE_ENV) else {
         return;
     };
+    let script = std::env::var(SCRIPT_ENV).unwrap_or_default();
     let mut command = Command::new("/bin/sh");
-    command
-        .args(["-c", "echo $$ > \"$0\"; sleep 30; :"])
-        .arg(pid_file);
+    command.args(["-c", &script]).arg(pid_file);
     super::forward_to_active_group();
     let _ = run_with_timeout(&mut command, "helper", Duration::from_secs(30));
 }
 
 #[test]
 fn a_terminated_host_takes_its_subprocess_group_with_it() {
-    let pid_file = std::env::temp_dir().join(format!("ad-interrupt-{}", std::process::id()));
+    assert_group_dies_with_host("obeys", OBEYS_TERM);
+}
+
+#[test]
+fn a_terminated_host_kills_a_subprocess_group_that_ignores_sigterm() {
+    assert_group_dies_with_host("ignores", IGNORES_TERM);
+}
+
+fn assert_group_dies_with_host(label: &str, script: &str) {
+    let pid_file =
+        std::env::temp_dir().join(format!("ad-interrupt-{label}-{}", std::process::id()));
     let _ = std::fs::remove_file(&pid_file);
     let mut host = Command::new(std::env::current_exe().unwrap())
         .args(["--ignored", "--exact", &helper_name()])
         .env(PID_FILE_ENV, &pid_file)
+        .env(SCRIPT_ENV, script)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
